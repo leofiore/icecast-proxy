@@ -27,14 +27,14 @@ class MySQLCursor:
             self.lock.acquire()
         self.cur = self.conn.cursor(self.curtype)
         return self.cur
-        
+
     def __exit__(self, type, value, traceback):
         self.cur.close()
         self.conn.commit()
         if (self.lock != None):
             self.lock.release()
         return
-    
+
 class Log(object):
     def __init__(self, client):
         super(Log, self).__init__()
@@ -43,20 +43,20 @@ class Log(object):
     def login(self):
         """Adds an entry for logon time of client."""
         pass
-    
+
 
     def logout(self):
         """Updates logoff time on last logon entry."""
         pass
-    
+
     def live_on(self):
         """Adds an entry on when client went live."""
         pass
-    
+
     def live_off(self):
         """Updates end time of live entry"""
         pass
-    
+
     def metadata(self, metadata):
         """Adds an entry for metadata."""
         pass

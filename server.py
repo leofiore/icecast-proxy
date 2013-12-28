@@ -272,10 +272,10 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
 def fix_encoding(metadata, encoding):
     """We get passed a byte string and an encoding and have to figure
     out what to do with it in regards to 'fixing' it.
-    
+
     when the encoding = latin1 we can safely assume the client send no
     explicit encoding and we apply the old ugly fix.
-    
+
     when the encoding is anything but latin1 we can safely know the client send
     an explicit encoding and we decode it properly.
     """

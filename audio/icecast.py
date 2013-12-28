@@ -112,7 +112,7 @@ class Icecast(object):
 
     def setup_libshout(self):
         """Internal method
-        
+
         Creates a libshout object and puts the configuration to use.
         """
         shout = pylibshout.Shout(tag_fix=False)
@@ -121,7 +121,7 @@ class Icecast(object):
 
     def reboot_libshout(self):
         """Internal method
-        
+
         Tries to recreate the libshout object.
         """
         try:
@@ -143,7 +143,7 @@ class IcecastConfig(dict):
 
     def setup(self, shout):
         """Setup 'shout' configuration by setting attributes on the object.
-        
+
         'shout' is a pylibshout.Shout object.
         """
         for key, value in self.iteritems():

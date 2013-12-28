@@ -83,7 +83,7 @@ class Buffer(object):
 
     def close(self):
         self.eof = True
-        
+
 class ChunkBuffer(object):
     def __init__(self, chunk_size=1024):
         super(ChunkBuffer, self).__init__()
@@ -92,7 +92,7 @@ class ChunkBuffer(object):
         self.length = 0
         self.lock = threading.Lock()
         self.eof = False
-        
+
     def write(self, data):
         with self.lock:
             self.length += len(data)
@@ -103,7 +103,7 @@ class ChunkBuffer(object):
             for chunk in chunks(itertools.chain(leftover, data),
                                 self.chunk_size):
                 self.buffer.append(chunk)
-        
+
     def read(self, size=None):
         with self.lock:
             if len(self) < self.chunk_size and (not self.eof):
@@ -111,26 +111,26 @@ class ChunkBuffer(object):
             data = self.buffer.popleft()
             self.length -= len(data)
             return data
-    
+
     def readable(self):
         if len(self) < self.chunk_size and (not self.eof):
             return False
         return True
-    
+
     def info(self):
         info_format = "Chunk size: {:d}\nChunks: {:d}\nLength: {:d}\nEOF: {:b}"
         return info_format.format(self.chunk_size, len(self.buffer),
                                 self.length, self.eof)
-        
+
     def __len__(self):
         return self.length
-    
+
     def __iter__(self):
         try:
             while True:
                 yield self.read()
         except BufferError:
             pass
-        
+
     def close(self):
         self.eof = True

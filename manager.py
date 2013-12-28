@@ -164,7 +164,7 @@ class IcyContext(object):
     @property
     def source(self):
         """Returns the first source in the :attr:`sources` deque.
-        
+
         If :attr:`sources` is empty it returns :const:`None` instead
         """
         try:
@@ -190,8 +190,8 @@ class IcyContext(object):
 
     def read(self, size=4096, timeout=None):
         """Reads at most :obj:`size`: of bytes from the first source in the
-        :attr:`sources`: deque. 
-        
+        :attr:`sources`: deque.
+
         :obj:`timeout`: is unused in this implementation."""
 
         # Acquire source once, then use that one return everywhere else.

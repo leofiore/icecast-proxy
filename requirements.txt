@@ -1,0 +1,4 @@
+bcrypt
+Cython
+-e git+http://github.com/Wessie/pylibshout@281fac7432c109b5988ef997834d9c175052da19#egg=pylibshout
+MySQL-python

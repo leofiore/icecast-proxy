@@ -5,7 +5,7 @@ import logging
 import bcrypt
 from buffers import Buffer
 from audio import icecast
-from database import MySQLCursor
+from database import SQLManager, User
 
 
 logger = logging.getLogger('server.manager')
@@ -25,7 +25,6 @@ def generate_info(mount):
             'mount': mount}
 
 
-
 class IcyManager(object):
     def __init__(self):
         super(IcyManager, self).__init__()
@@ -41,13 +40,12 @@ class IcyManager(object):
             try:
                 user, password = password.split('|')
             except ValueError as err:
+                logger.error(err)
                 return False
-        with MySQLCursor() as cur:
-            cur.execute(("SELECT * FROM users WHERE user=%s "
-                         "AND privileges>%s LIMIT 1;"),
-                        (user, privilege))
-            for row in cur:
-                hash = row['pass']
+        logger.debug('checking password for user %s' % user)
+        with SQLManager() as session:
+            for row in session.query(User).filter(User.privileges >= 1):
+                hash = str(row.password)
                 if bcrypt.hashpw(password, hash) == hash:
                     return True
             return False

@@ -1,39 +1,49 @@
-import MySQLdb
-import MySQLdb.cursors
 import config
 from threading import current_thread
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, Integer, String
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, scoped_session
+import config
 
-class MySQLCursor:
-    """Return a connected MySQLdb cursor object"""
-    counter = 0
-    cache = {}
-    def __init__(self, cursortype=MySQLdb.cursors.DictCursor, lock=None):
-        threadid = current_thread().ident
-        if (threadid in self.cache):
-            self.conn = self.cache[threadid]
-            self.conn.ping(True)
-        else:
-            self.conn = MySQLdb.connect(host=config.dbhost,
-                                user=config.dbuser,
-                                passwd=config.dbpassword,
-                                db=config.dbtable,
-                                charset='utf8',
-                                use_unicode=True)
-            self.cache[threadid] = self.conn
-        self.curtype = cursortype
-        self.lock = lock
+Base = declarative_base()
+class User(Base):
+    __tablename__ = 'users'
+
+    user = Column(String, primary_key=True)
+    password = Column(String, nullable=False)
+    privileges = Column(Integer)
+
+    def __repr__(self):
+        return "<User %s (%s) %d>" % (self.user, self.password, self.privileges)
+
+
+engine = create_engine(config.connection)
+Base.metadata.create_all(engine)
+
+class SQLManager:
+    """an ORM sqlmanager"""
+    dosession = scoped_session(sessionmaker(bind=engine))
+
+    def __init__(self):
+        self.session = self.dosession()
+        self.opened = True
+
+    def __del__(self):
+        if self.opened:
+            self.session.close()
+        self.opened = False
+
     def __enter__(self):
-        if (self.lock != None):
-            self.lock.acquire()
-        self.cur = self.conn.cursor(self.curtype)
-        return self.cur
+        if not self.opened:
+            self.session = self.dosession()
+        self.opened = True
+        return self.session
 
-    def __exit__(self, type, value, traceback):
-        self.cur.close()
-        self.conn.commit()
-        if (self.lock != None):
-            self.lock.release()
-        return
+    def __exit__(self, *args):
+        if self.opened:
+            self.session.close()
+        self.opened = False
 
 class Log(object):
     def __init__(self, client):
@@ -60,3 +70,4 @@ class Log(object):
     def metadata(self, metadata):
         """Adds an entry for metadata."""
         pass
+

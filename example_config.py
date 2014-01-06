@@ -1,13 +1,6 @@
-
-#: Database host to use as string
-dbhost = ''
-#: Database user to use as string
-dbuser = ''
-#: Database password to use as string
-dbpassword = ''
-#: Database table to use as string
-dbtable = ''
-
+#: connection string in sqlalchemy style
+#: dialect+driver://user:password@host/dbname[?key=value..]
+connection = ''
 
 #: Address to bind our listening socket on
 server_address = '0.0.0.0'

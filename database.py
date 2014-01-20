@@ -1,7 +1,7 @@
 import config
 from threading import current_thread
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, Enum
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
 import config
@@ -15,11 +15,31 @@ class User(Base):
     privileges = Column(Integer)
 
     def __repr__(self):
-        return "<User %s (%s) %d>" % (self.user, self.password, self.privileges)
+        return "<User %s %d>" % (self.user, self.privileges)
+
+class Mount(Base):
+    __tablename__ = 'mounts'
+
+    source = Column(String, primary_key=True, nullable=False)
+    host = Column(String, nullable=False)
+    port = Column(Integer)
+    password = Column(String, nullable=False)
+    format = Column(Enum('ogg', 'mpeg', 'flac', 'aac'))
+    protocol = Column(String, nullable=False)
+    mount = Column(String, primary_key=True, nullable=False)
+    name = Column(String, default=config.meta_name)
+    url = Column(String, default=config.meta_url)
+    genre = Column(String, default=config.meta_genre)
+    bitrate = Column(Integer)
+    user = Column(String, default='source', nullable=False)
+
+    def __repr__(self):
+        return "<Mount %s:%d%s %d>" % (self.host, self.port, self.destination)
 
 
 engine = create_engine(config.connection)
 Base.metadata.create_all(engine)
+
 
 class SQLManager:
     """an ORM sqlmanager"""

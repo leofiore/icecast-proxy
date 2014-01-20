@@ -8,42 +8,194 @@ import threading
 import config
 import urllib2
 import signal
-import collections
 from cgi import escape as esc
 from BaseHTTPandICEServer import HTTPServer, BaseHTTPRequestHandler
 from SocketServer import ThreadingMixIn, BaseServer
-from buffers import Buffer
+#from subprocess import Popen, PIPE
+from select import select
+from cStringIO import StringIO
 
 
 socket.setdefaulttimeout(5.0)
-MAX_BUFFER = 24*1024*2 # Go about 192kbps (24kB/s) times two for a 2 second buffer
-#MAX_DEQUES = 4
+# Go about 192kbps (24kB/s) times two for a 2 second buffer
+MAX_BUFFER = 24 * 1024 * 2
 logger = logging.getLogger('server')
 
 
-class IcyClient(object):
-    def __init__(self, buffer, mount, user=None, useragent=None, stream_name=None):
-        self.user = user
-        self.useragent = useragent
-        self.mount = mount
-        self.buffer = buffer
-        self.stream_name = stream_name
+class IcyClient(dict):
+
+    def __init__(self,
+                 host,
+                 port,
+                 source,
+                 mount,
+                 user,
+                 password,
+                 useragent,
+                 stream_name,
+                 format,
+                 protocol,
+                 name):
+        dict.__init__(self)
+        self.attributes = {
+            'audio_buffer': cStringTranscoder(),
+            'source': source,
+            'mount': mount,
+            'user': user,
+            'useragent': useragent,
+            'stream_name': stream_name,
+            'host': host,
+            'port': port,
+            'password': password,
+            'format': format,
+            'protocol': protocol,
+            'name': name,
+            'url': '',
+            'genre': ''
+        }
+
+    @property
+    def mount(self):
+        return self.attributes["mount"]
+
+    @property
+    def user(self):
+        return self.attributes["user"]
+
+    @property
+    def useragent(self):
+        return self.attributes["useragent"]
+
+    @property
+    def stream_name(self):
+        return self.attributes["stream_name"]
+
+    @property
+    def buffer(self):
+        return self.attributes["audio_buffer"]
+
+    @property
+    def password(self):
+        return self.attributes["password"]
+
+    @property
+    def source(self):
+        return self.attributes["source"]
+
+    @property
+    def host(self):
+        return self.attributes["host"]
+
+    @property
+    def port(self):
+        return self.attributes["port"]
+
+    @property
+    def format(self):
+        return ['ogg', 'mpeg', 'flac', 'aac'].index(self.attributes["format"])
+
+    @property
+    def protocol(self):
+        return self.attributes["protocol"]
+
+    @property
+    def name(self):
+        return self.attributes["name"]
+
+    @property
+    def url(self):
+        return self.attributes["url"]
+
+    @property
+    def genre(self):
+        return self.attributes['genre']
+
+    def write(self, data):
+        self.attributes['audio_buffer'].write(data)
+
+    def get(self, k, d=None):
+        try:
+            return self.__getattribute__(k)
+        except KeyError:
+            return dict.__getitem__(self, k, d)
+
+    def __getitem__(self, y):
+        try:
+            return self.__getattribute__(y)
+        except KeyError:
+            return dict.__getitem__(self, y)
+
+    def __setitem__(self, i, y):
+        if not i in self.attributes.keys():
+            dict.__setitem__(self, i, y)
+
+    def items(self):
+        return dict.items(self) + self.attributes.items()
+
+    def keys(self):
+        return dict.keys(self) + self.attributes.keys()
+
+    def values(self):
+        return dict.values(self) + self.attributes.values()
+
+    def iteritems(self):
+        return iter(dict.items(self) + self.attributes.items())
 
     def __repr__(self):
-        return "IcyClient(mount={:s}, useragent={:s}, user={:s}, streamname={:s})".format(
-                                                            self.mount,
-                                                            self.useragent,
-                                                            self.user,
-                                                            self.stream_name)
-IcyClient = collections.namedtuple('IcyClient',
-                                   ('buffer', 'mount', 'user', 'useragent', 'stream_name'))
+        return self.attributes.__repr__()
+
+
+class cStringTranscoder:
+
+    def __init__(self):
+        self.buffer = StringIO()
+        self.readpos = 0
+        self.writepos = 0
+        self.size = MAX_BUFFER
+        self.mutex = threading.RLock()
+        self.not_empty = threading.Condition(self.mutex)
+        self.not_full = threading.Condition(self.mutex)
+        self.subprocess = None
+
+    def write(self, data):
+        with self.not_full:
+            while self.writepos - self.readpos == self.size:
+                self.not_full.wait()
+            self.buffer.seek(self.writepos)
+            self.buffer.write(data)
+            self.writepos = self.buffer.tell()
+            if self.writepos > MAX_BUFFER:
+                self.size = self.writepos
+                self.writepos = 0
+            self.not_empty.notify()
+
+    def read(self, size):
+        with self.not_empty:
+            while self.writepos - self.readpos == 0:
+                self.not_empty.wait()
+            while self.writepos < (self.readpos + size) % self.size:
+                self.not_empty.wait()
+            self.buffer.seek(self.readpos)
+            data = self.buffer.read(min(size, self.size - self.readpos))
+            oldpos = self.readpos
+            self.readpos = self.buffer.tell()
+            if self.writepos < oldpos and self.readpos >= self.size:
+                self.readpos = 0
+            elif oldpos < self.writepos <= self.readpos:
+                self.readpos = self.writepos
+            self.not_full.notify()
+        return data
+
+    def close(self):
+        self.buffer.close()
 
 
 server_header = u"""
 <html>\n<head>\n<title>Icecast Proxy</title>
 <style type="text/css">
-table{border: 1px solid #999;border-right:0;border-bottom:0;margin-top:4px;}
-td, th{border-bottom:1px solid #ccc;border-right:1px solid #eee;padding: .2em .5em;}
+table {border: 1px solid #999;border-right:0;border-bottom:0;margin-top:4px;}
+td, th
+{border-bottom:1px solid #ccc;border-right:1px solid #eee;padding: .2em .5em;}
 form{margin:0;padding:0;}
 </style>\n</head>\n<body>
 <h3>Icecast Proxy</h3>
@@ -81,6 +233,7 @@ client_html = u"""
 
 class IcyRequestHandler(BaseHTTPRequestHandler):
     manager = manager.IcyManager()
+
     def _get_login(self):
         try:
             login = self.headers['Authorization'].split()[1]
@@ -103,7 +256,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                 send_buf.append(mount_header.format(mount=esc(mount)))
                 for i, source in enumerate(self.manager.context[mount].sources):
                     metadata = self.manager.context[mount].saved_metadata.get(source, u'')
-                    send_buf.append(client_html.format(\
+                    send_buf.append(client_html.format(
                         user=esc(source.info.user),
                         meta=esc(metadata),
                         agent=esc(source.info.useragent),
@@ -126,9 +279,12 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             logger.exception("Error in request handler")
 
     def do_SOURCE(self):
+        logger.debug(self.headers)
         self.useragent = self.headers.get('User-Agent', None)
         self.mount = self.path  # oh so simple
         self.stream_name = self.headers.get('ice-name', '<Unknown>')
+        self.source_content = self.headers.get('Content-type', None)
+        self.source_bitrate = self.headers.get('ice-bitrate', None)
         user, password = self._get_login()
         if (self.login(user=user, password=password)):
             if user == 'source':
@@ -154,24 +310,40 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
-        self.audio_buffer = Buffer(max_size=MAX_BUFFER)
-        self.icy_client = IcyClient(self.audio_buffer,
-                                   self.mount,
-                                   user=user,
-                                   useragent=self.useragent,
-                                   stream_name=self.stream_name)
-        self.manager.register_source(self.icy_client)
+        self.icy_client = []
+        logger.debug('lookup for source mountpoint %s' % self.mount)
+        for path in self.manager.lookup_destination(self.mount):
+            self.icy_client.append(IcyClient(path.host,
+                                             path.port,
+                                             path.source,
+                                             path.mount,
+                                             user=user,
+                                             password=path.password,
+                                             useragent=self.useragent,
+                                             stream_name=self.stream_name,
+                                             format=path.format,
+                                             protocol=path.protocol,
+                                             name=path.name)
+                                   )
+            self.manager.register_source(self.icy_client[-1])
+        logger.debug('registered %d mountpoints destinations' % len(self.icy_client))
         try:
             while True:
+                rlist, wlist, xlist = select([self.rfile], [], [], 100)
+                if not len(rlist):
+                    continue
                 data = self.rfile.read(4096)
                 if data == '':
                     break
-                self.audio_buffer.write(data)
+                for client in self.icy_client:
+                    client.write(data)
         except:
             logger.exception("Timeout occured (most likely)")
         finally:
             logger.info("source: User '%s' logged off.", user)
-            self.manager.remove_source(self.icy_client)
+            for client in self.icy_client:
+                self.manager.remove_source(client)
+                self.icy_client.remove(client)
 
     def do_GET(self):
         self.useragent = self.headers.get('User-Agent', None)
@@ -199,8 +371,9 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                     mount = parsed_query['mount'][0]
                 except KeyError, IndexError:
                     mount = ''
-                self.client = IcyClient(None, mount,
-                                        user, self.useragent, None)
+                self.client = IcyClient(None, None, None, mount,
+                                        user, None, self.useragent, None,
+                                        None, None)
 
                 song = parsed_query.get('song', None)
                 encoding = parsed_query.get('charset', ['latin1'])
@@ -225,8 +398,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             elif parsed_url.path == "/admin/listclients":
                 auth = "{:s}:{:s}".format('source', config.icecast_pass)
                 auth = auth.encode('base64')
-                url = urlparse.urlparse('http://{:s}:{:d}/'.format(
-                                                                   config.icecast_host,
+                url = urlparse.urlparse('http://{:s}:{:d}/'.format(config.icecast_host,
                                                                    config.icecast_port)
                                         )
                 url = url[:2] + parsed_url[2:]
@@ -243,7 +415,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                     self.end_headers()
                     return
                 except urllib2.URLError as err:
-                    self.send_reponse(501)
+                    self.send_response(501)
                     self.end_headers()
                     return
 
@@ -298,6 +470,7 @@ def fix_encoding(metadata, encoding):
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     timeout = 0.5
+
     def finish_request(self, request, client_address):
         """Finish one request by instantiating RequestHandlerClass."""
         try:
@@ -307,6 +480,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
                 logger.warning("Broken pipe exception, ignoring")
             else:
                 logger.exception("Error in request handler")
+
 
 def run(server=ThreadedHTTPServer,
         handler=IcyRequestHandler,
@@ -326,9 +500,11 @@ def start():
     _server_thread.daemon = True
     _server_thread.start()
 
+
 def close():
     _server_event.set()
     _server_thread.join(10.0)
+
 
 if __name__ == "__main__":
     # Setup logging
@@ -336,9 +512,7 @@ if __name__ == "__main__":
     logfile = logging.FileHandler(os.path.expanduser('~/logs/proxy.log'),
                                   encoding='utf-8')
 
-    formatter = logging.Formatter(
-                      '%(asctime)s:%(name)s:%(levelname)s: %(message)s'
-                      )
+    formatter = logging.Formatter('%(asctime)s:%(name)s:%(levelname)s: %(message)s')
 
     # Add the formatters for timestamps
     stream.setFormatter(formatter)
@@ -358,6 +532,7 @@ if __name__ == "__main__":
 
     import time
     killed = threading.Event()
+
     def signal_handler(signum, frame):
         close()
         killed.set()
@@ -366,4 +541,3 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, signal_handler)
     while not killed.is_set():
         time.sleep(5)
-

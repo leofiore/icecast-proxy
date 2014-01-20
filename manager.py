@@ -5,7 +5,7 @@ import logging
 import bcrypt
 from buffers import Buffer
 from audio import icecast
-from database import SQLManager, User
+from database import SQLManager, User, Mount
 
 
 logger = logging.getLogger('server.manager')
@@ -13,16 +13,16 @@ STuple = collections.namedtuple('STuple', ['buffer', 'info'])
 ITuple = collections.namedtuple('ITuple', ['user', 'useragent', 'stream_name'])
 
 
-def generate_info(mount):
-    return {'host': config.icecast_host,
-            'port': config.icecast_port,
-            'password': config.icecast_pass,
-            'format': config.icecast_format,
-            'protocol': config.icecast_protocol,
-            'name': config.meta_name,
-            'url': config.meta_url,
-            'genre': config.meta_genre,
-            'mount': mount}
+def generate_info(client):
+    return {'host': client.host,
+            'port': client.port,
+            'password': client.password,
+            'format': client.format,
+            'protocol': client.protocol,
+            'name': client.name,
+            'url': client.url,
+            'genre': client.genre,
+            'mount': client.mount}
 
 
 class IcyManager(object):
@@ -47,18 +47,28 @@ class IcyManager(object):
             for row in session.query(User).filter(User.privileges >= 1):
                 hash = str(row.password)
                 if bcrypt.hashpw(password, hash) == hash:
+                    logger.debug('Successful!')
                     return True
             return False
+
+    def lookup_destination(self, mount):
+        """Returns a list of destination mountpoints related to
+           the specific client"""
+        with SQLManager() as session:
+            return session.query(Mount).filter(Mount.source == mount)
+
+    def _ctx_hash(self, client):
+        return ':'.join((client.source, client.mount))
 
     def register_source(self, client):
         """Register a connected icecast source to be used for streaming to
         the main server."""
         with self.context_lock:
             try:
-                context = self.context[client.mount]
+                context = self.context[self._ctx_hash(client)]
             except KeyError:
-                context = IcyContext(client.mount)
-                self.context[client.mount] = context
+                context = IcyContext(client)
+                self.context[self._ctx_hash(client)] = context
         with context:
             context.append(client)
             if not context.icecast.connected():
@@ -69,7 +79,7 @@ class IcyManager(object):
         sources to be used for streaming."""
         with self.context_lock:
             try:
-                context = self.context[client.mount]
+                context = self.context[self._ctx_hash(client)]
             except KeyError:
                 # We can be sure there is no source when the mount is unknown
                 return
@@ -95,7 +105,7 @@ class IcyManager(object):
 
 class IcyContext(object):
     """A class that is the context of a single icecast mountpoint."""
-    def __init__(self, mount):
+    def __init__(self, client):
         super(IcyContext, self).__init__()
         # : Set to last value returned by :attr:`source`:
         self.current_source = None
@@ -107,11 +117,12 @@ class IcyContext(object):
         self.eof_buffer = Buffer(1)
         self.eof_buffer.close()
 
-        self.mount = mount
+        self.mount = client.mount
         # : Deque of tuples of the format STuple(source, ITuple(user, useragent, stream_name))
         self.sources = collections.deque()
 
-        self.icecast_info = generate_info(mount)
+        self.icecast_info = generate_info(client)
+        #self.icecast_info = client
         self.icecast = icecast.Icecast(self, self.icecast_info)
 
         self.saved_metadata = {}

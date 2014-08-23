@@ -1,5 +1,4 @@
 import threading
-import config
 import collections
 import logging
 import bcrypt
@@ -88,7 +87,9 @@ class IcyManager(object):
                 context.remove(client)
             except ValueError:
                 # Source isn't in the sources list?
-                logger.warning('An unknown source tried to be removed. Logic error')
+                logger.warning(
+                    'An unknown source tried to be removed. Logic error'
+                )
             finally:
                 if not context.sources:
                     context.stop_icecast()
@@ -118,7 +119,8 @@ class IcyContext(object):
         self.eof_buffer.close()
 
         self.mount = client.mount
-        # : Deque of tuples of the format STuple(source, ITuple(user, useragent, stream_name))
+        # : Deque of tuples of the format
+        # STuple(source, ITuple(user, useragent, stream_name))
         self.sources = collections.deque()
 
         self.icecast_info = generate_info(client)
@@ -135,40 +137,47 @@ class IcyContext(object):
 
     def __repr__(self):
         return "IcyContext(mount={:s}, user count={:d})".format(
-                                                                self.mount,
-                                                                len(self.sources)
-                                                                )
+            self.mount,
+            len(self.sources)
+        )
 
     def append(self, source):
         """Append a source client to the list of sources for this context."""
-        source_tuple = STuple(source.buffer, ITuple(source.user,
-                                                    source.useragent,
-                                                    source.stream_name))
+        source_tuple = STuple(
+            source.buffer,
+            ITuple(
+                source.user,
+                source.useragent,
+                source.stream_name
+            ))
         logger.debug("Adding source '{source:s}' from '{context:s}'".format(
-                                           source=repr(source_tuple),
-                                           context=repr(self),
-                                           ))
+            source=repr(source_tuple),
+            context=repr(self)
+        ))
         self.sources.append(source_tuple)
         logger.debug("Current sources are '{sources:s}'.".format(
-                                              sources=repr(self.sources))
-                                              )
+            sources=repr(self.sources))
+        )
 
     def remove(self, source):
         """Remove a source client of the list of sources for this context."""
-        source_tuple = STuple(source.buffer, ITuple(source.user,
-                                                    source.useragent,
-                                                    source.stream_name))
+        source_tuple = STuple(
+            source.buffer,
+            ITuple(
+                source.user,
+                source.useragent,
+                source.stream_name
+            ))
         logger.debug("Removing source '{source:s}' from '{context:s}'".format(
-                                           source=repr(source_tuple),
-                                           context=repr(self),
-                                           ))
+            source=repr(source_tuple),
+            context=repr(self)
+        ))
         self.sources.remove(source_tuple)
         logger.debug("Current sources are '{sources:s}'.".format(
-                                              sources=repr(self.sources))
-                                              )
+            sources=repr(self.sources))
+        )
         # Close our buffer to make sure we EOF
         source_tuple.buffer.close()
-
 
     @property
     def source(self):
@@ -183,10 +192,12 @@ class IcyContext(object):
             return None
         else:
             if not self.current_source is source:
-                logger.info("%s: Changing source from '%s' to '%s'.",
-                            self.mount, 'None' if self.current_source is None \
-                                        else self.current_source.info.user,
-                            source.info.user)
+                logger.info(
+                    "%s: Changing source from '%s' to '%s'.",
+                    self.mount,
+                    'None' if self.current_source is None
+                    else self.current_source.info.user,
+                    source.info.user)
                 # We changed source sir. Send saved metadata if any.
                 if source in self.saved_metadata:
                     metadata = self.saved_metadata[source]

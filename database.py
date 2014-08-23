@@ -1,5 +1,3 @@
-import config
-from threading import current_thread
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, Enum
 from sqlalchemy import create_engine
@@ -7,6 +5,8 @@ from sqlalchemy.orm import sessionmaker, scoped_session
 import config
 
 Base = declarative_base()
+
+
 class User(Base):
     __tablename__ = 'users'
 
@@ -16,6 +16,7 @@ class User(Base):
 
     def __repr__(self):
         return "<User %s %d>" % (self.user, self.privileges)
+
 
 class Mount(Base):
     __tablename__ = 'mounts'
@@ -65,6 +66,7 @@ class SQLManager:
             self.session.close()
         self.opened = False
 
+
 class Log(object):
     def __init__(self, client):
         super(Log, self).__init__()
@@ -73,7 +75,6 @@ class Log(object):
     def login(self):
         """Adds an entry for logon time of client."""
         pass
-
 
     def logout(self):
         """Updates logoff time on last logon entry."""
@@ -90,4 +91,3 @@ class Log(object):
     def metadata(self, metadata):
         """Adds an entry for metadata."""
         pass
-

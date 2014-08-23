@@ -6,8 +6,10 @@ import logging
 
 logger = logging.getLogger('audio.icecast')
 
+
 class Icecast(object):
     connecting_timeout = 5.0
+
     def __init__(self, source, config):
         super(Icecast, self).__init__()
         self.config = (config if isinstance(config, IcecastConfig)
@@ -133,6 +135,7 @@ class Icecast(object):
             self.connect()
         except (IcecastError) as err:
             logger.exception("Connection failure.")
+
 
 class IcecastConfig(dict):
     """Simple dict subclass that knows how to apply the keys to a

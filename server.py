@@ -244,7 +244,10 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
 
     def _serve_admin(self, url, query, user, password):
         # admin is 4 and higher
-        is_admin = self.manager.login(user=user, password=password, privilege=3)
+        is_admin = self.manager.login(
+            user=user,
+            password=password,
+            privilege=3)
         # disabled = u'disabled' if not is_admin else None
         disabled = u'disabled'
         # TODO kicking. maybe.
@@ -252,10 +255,13 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         send_buf.append(server_header)
 
         for mount in self.manager.context:
-            if self.manager.context[mount].sources:  # only include if there is a source on there
+            # only include if there is a source on there
+            if self.manager.context[mount].sources:
                 send_buf.append(mount_header.format(mount=esc(mount)))
-                for i, source in enumerate(self.manager.context[mount].sources):
-                    metadata = self.manager.context[mount].saved_metadata.get(source, u'')
+                for i, source in enumerate(
+                        self.manager.context[mount].sources):
+                    metadata = self.manager.context[
+                        mount].saved_metadata.get(source, u'')
                     send_buf.append(client_html.format(
                         user=esc(source.info.user),
                         meta=esc(metadata),
@@ -273,7 +279,6 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/html")
             self.send_header("Content-Length", len(send_buf))
             self.end_headers()
-
             self.wfile.write(send_buf)
         except IOError as err:
             logger.exception("Error in request handler")
@@ -326,7 +331,9 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                                              name=path.name)
                                    )
             self.manager.register_source(self.icy_client[-1])
-        logger.debug('registered %d mountpoints destinations' % len(self.icy_client))
+        logger.debug(
+            'registered %d mountpoints destinations'
+            % len(self.icy_client))
         try:
             while True:
                 rlist, wlist, xlist = select([self.rfile], [], [], 100)
@@ -369,7 +376,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             elif parsed_url.path == "/admin/metadata":
                 try:
                     mount = parsed_query['mount'][0]
-                except KeyError, IndexError:
+                except (KeyError, IndexError):
                     mount = ''
                 self.client = IcyClient(None, None, None, mount,
                                         user, None, self.useragent, None,
@@ -379,7 +386,9 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                 encoding = parsed_query.get('charset', ['latin1'])
                 if not song is None:
                     metadata = fix_encoding(song[0], encoding[0])
-                    self.manager.send_metadata(metadata=metadata, client=self.client)
+                    self.manager.send_metadata(
+                        metadata=metadata,
+                        client=self.client)
 
                 # Send a response... although most clients just ignore this.
                 try:
@@ -388,7 +397,10 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                     self.send_header("Content-Length", "113")
                     self.end_headers()
 
-                    self.wfile.write('<?xml version="1.0"?>\n<iceresponse><message>Metadata update successful</message><return>1</return></iceresponse>')
+                    self.wfile.write(
+                        '<?xml version="1.0"?>\n<iceresponse>'
+                        '<message>Metadata update successful</message>'
+                        '<return>1</return></iceresponse>')
                 except IOError as err:
                     if hasattr(err, 'errno') and err.errno == 32:
                         #logger.warning("Broken pipe exception, ignoring")
@@ -398,9 +410,10 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             elif parsed_url.path == "/admin/listclients":
                 auth = "{:s}:{:s}".format('source', config.icecast_pass)
                 auth = auth.encode('base64')
-                url = urlparse.urlparse('http://{:s}:{:d}/'.format(config.icecast_host,
-                                                                   config.icecast_port)
-                                        )
+                url = urlparse.urlparse('http://{:s}:{:d}/'.format(
+                    config.icecast_host,
+                    config.icecast_port)
+                )
                 url = url[:2] + parsed_url[2:]
                 url = urlparse.urlunparse(url)
 
@@ -429,7 +442,9 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(result)
         else:
             self.send_response(401)
-            self.send_header('WWW-Authenticate', 'Basic realm="Icecast2 Proxy"')
+            self.send_header(
+                'WWW-Authenticate',
+                'Basic realm="Icecast2 Proxy"')
             self.end_headers()
             # return
 
@@ -502,6 +517,7 @@ def start():
 
 
 def close():
+    global _server_event, _server_thread
     _server_event.set()
     _server_thread.join(10.0)
 
@@ -509,10 +525,13 @@ def close():
 if __name__ == "__main__":
     # Setup logging
     stream = logging.StreamHandler()
-    logfile = logging.FileHandler(os.path.expanduser('~/logs/proxy.log'),
-                                  encoding='utf-8')
+    logfile = logging.FileHandler(
+        os.path.expanduser('~/logs/proxy.log'),
+        encoding='utf-8')
 
-    formatter = logging.Formatter('%(asctime)s:%(name)s:%(levelname)s: %(message)s')
+    formatter = logging.Formatter(
+        '%(asctime)s:%(name)s:%(levelname)s: %(message)s'
+    )
 
     # Add the formatters for timestamps
     stream.setFormatter(formatter)

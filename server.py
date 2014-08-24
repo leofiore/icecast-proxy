@@ -1,6 +1,7 @@
 #!/usr/bin/python
 import socket
 import os
+import re
 import urlparse
 import logging
 import manager
@@ -11,7 +12,7 @@ import signal
 from cgi import escape as esc
 from BaseHTTPandICEServer import HTTPServer, BaseHTTPRequestHandler
 from SocketServer import ThreadingMixIn, BaseServer
-#from subprocess import Popen, PIPE
+from subprocess import Popen, PIPE
 from select import select
 from cStringIO import StringIO
 
@@ -33,12 +34,14 @@ class IcyClient(dict):
                  password,
                  useragent,
                  stream_name,
-                 format,
+                 informat,
+                 outformat,
                  protocol,
                  name):
         dict.__init__(self)
         self.attributes = {
-            'audio_buffer': cStringTranscoder(),
+            'audio_buffer': cStringTranscoder(
+                informat, outformat),
             'source': source,
             'mount': mount,
             'user': user,
@@ -47,7 +50,7 @@ class IcyClient(dict):
             'host': host,
             'port': port,
             'password': password,
-            'format': format,
+            'format': outformat,
             'protocol': protocol,
             'name': name,
             'url': '',
@@ -144,10 +147,21 @@ class IcyClient(dict):
     def __repr__(self):
         return self.attributes.__repr__()
 
+    def terminate(self):
+        self.attributes['audio_buffer'].close()
+
 
 class cStringTranscoder:
 
-    def __init__(self):
+    decode_flac = 'flac -s -d --force-raw-format --sign=signed --endian=little -o - -'
+
+    decode_mpeg = 'madplay -b 16 -R 44100 -S -o raw:- -'
+    encode_mpeg = 'lame --preset cbr 128 -r -s 44.1 --bitwidth 16 - -'
+
+    decode_ogg = 'oggdec -R -b 16 -e 0 -s 1 -o - -'
+    encode_ogg = 'oggenc -r -B 16 -C 2 -R 44100 --raw-endianness 0 -q 1.5 -'
+
+    def __init__(self, infmt, outfmt):
         self.buffer = StringIO()
         self.readpos = 0
         self.writepos = 0
@@ -155,12 +169,57 @@ class cStringTranscoder:
         self.mutex = threading.RLock()
         self.not_empty = threading.Condition(self.mutex)
         self.not_full = threading.Condition(self.mutex)
-        self.subprocess = None
+        if infmt == outfmt:
+            self.decproc = None
+            self.encproc = None
+        else:
+            logger.info("Buffer will activate transcoding")
+            dec = getattr(self, 'decode_' + infmt)
+            enc = getattr(self, 'encode_' + outfmt)
+            self.decproc = Popen(
+                dec.split(),
+                stdin=PIPE, stdout=PIPE
+            )
+            self.encproc = Popen(
+                enc.split(),
+                stdin=self.decproc.stdout, stdout=PIPE
+            )
 
-    def write(self, data):
+    def write(self, data_in):
         with self.not_full:
             while self.writepos - self.readpos == self.size:
                 self.not_full.wait()
+            if self.decproc and self.encproc:
+                data_sent = False
+                data = None
+                try:
+                    logger.debug("writing on stdin decoder")
+                    while not data_sent and not data:
+                        rlist, wlist, xlist = select(
+                            [self.encproc.stdout, self.decproc.stdout],
+                            [self.decproc.stdin],
+                            [],
+                            0.5
+                        )
+                        if len(wlist) and not data_sent:
+                            logger.debug("writing to decoder")
+                            self.decproc.stdin.write(data_in)
+                            data_sent = True
+                            logger.debug("wrote to decoder")
+                        if len(rlist) == 2:
+                            logger.debug("reading from encoder")
+                            data = self.encproc.stdout.read(8192)
+                            if not len(data):
+                                return
+                            logger.debug("read from encoder %s", len(data))
+                        elif not len(rlist) and data_sent:
+                            return
+                except IOError as err:
+                    logger.error(err)
+            else:
+                data = data_in
+            if not data:
+                return
             self.buffer.seek(self.writepos)
             self.buffer.write(data)
             self.writepos = self.buffer.tell()
@@ -188,6 +247,17 @@ class cStringTranscoder:
 
     def close(self):
         self.buffer.close()
+        try:
+            if self.encproc:
+                self.encproc.kill()
+                self.encproc.wait()
+            if self.decproc:
+                self.decproc.send_signal(13) # SIGPIPE
+                self.decproc.kill()
+                self.decproc.wait()
+        except:
+            pass
+        logger.debug("client closed")
 
 
 server_header = u"""
@@ -289,6 +359,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         self.mount = self.path  # oh so simple
         self.stream_name = self.headers.get('ice-name', '<Unknown>')
         self.source_content = self.headers.get('Content-type', None)
+        fmt = re.search("(mpeg|ogg|flac)", self.source_content).groups()[0]
         self.source_bitrate = self.headers.get('ice-bitrate', None)
         user, password = self._get_login()
         if (self.login(user=user, password=password)):
@@ -328,7 +399,8 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                     password=path.password,
                     useragent=self.useragent,
                     stream_name=self.stream_name,
-                    format=path.format,
+                    informat=fmt,
+                    outformat=path.format,
                     protocol=path.protocol,
                     name=path.name)
             )
@@ -358,6 +430,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             for client in self.icy_client:
                 self.manager.remove_source(client)
                 self.icy_client.remove(client)
+                client.terminate()
 
     def do_GET(self):
         self.useragent = self.headers.get('User-Agent', None)

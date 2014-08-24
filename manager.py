@@ -57,7 +57,8 @@ class IcyManager(object):
             return session.query(Mount).filter(Mount.source == mount)
 
     def _ctx_hash(self, client):
-        return ':'.join((client.source, client.mount))
+        return ':'.join(
+            (client.source, client.host, str(client.port), client.mount))
 
     def register_source(self, client):
         """Register a connected icecast source to be used for streaming to
@@ -68,10 +69,16 @@ class IcyManager(object):
             except KeyError:
                 context = IcyContext(client)
                 self.context[self._ctx_hash(client)] = context
+        logger.info("%s Context(s): %s", len(self.context), self.context)
         with context:
             context.append(client)
             if not context.icecast.connected():
-                context.start_icecast()
+                try:
+                    context.start_icecast()
+                except Exception as err:
+                    logger.error(err)
+                    context.remove(client)
+                    raise Exception()
 
     def remove_source(self, client):
         """Removes a connected icecast source from the list of tracked
@@ -156,7 +163,7 @@ class IcyContext(object):
         ))
         self.sources.append(source_tuple)
         logger.debug("Current sources are '{sources:s}'.".format(
-            sources=repr(self.sources))
+            sources=[repr(s) for s in self.sources])
         )
 
     def remove(self, source):

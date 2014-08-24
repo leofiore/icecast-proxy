@@ -318,19 +318,26 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         self.icy_client = []
         logger.debug('lookup for source mountpoint %s' % self.mount)
         for path in self.manager.lookup_destination(self.mount):
-            self.icy_client.append(IcyClient(path.host,
-                                             path.port,
-                                             path.source,
-                                             path.mount,
-                                             user=user,
-                                             password=path.password,
-                                             useragent=self.useragent,
-                                             stream_name=self.stream_name,
-                                             format=path.format,
-                                             protocol=path.protocol,
-                                             name=path.name)
-                                   )
-            self.manager.register_source(self.icy_client[-1])
+            self.icy_client.append(
+                IcyClient(
+                    path.host,
+                    path.port,
+                    path.source,
+                    path.mount,
+                    user=user,
+                    password=path.password,
+                    useragent=self.useragent,
+                    stream_name=self.stream_name,
+                    format=path.format,
+                    protocol=path.protocol,
+                    name=path.name)
+            )
+            try:
+                self.manager.register_source(self.icy_client[-1])
+            except Exception as err:
+                logger.error(err)
+                self.icy_client.pop()
+                continue
         logger.debug(
             'registered %d mountpoints destinations'
             % len(self.icy_client))
@@ -380,7 +387,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                     mount = ''
                 self.client = IcyClient(None, None, None, mount,
                                         user, None, self.useragent, None,
-                                        None, None)
+                                        None, None, None)
 
                 song = parsed_query.get('song', None)
                 encoding = parsed_query.get('charset', ['latin1'])
@@ -517,8 +524,10 @@ def start():
 
 
 def close():
+    logger.warn("TERM|INT received, shutting down...")
     global _server_event, _server_thread
     _server_event.set()
+    logger.warn("Wating threads shuts...")
     _server_thread.join(10.0)
 
 

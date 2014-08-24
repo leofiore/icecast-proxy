@@ -92,7 +92,7 @@ class IcyClient(dict):
 
     @property
     def format(self):
-        return ['ogg', 'mpeg', 'flac', 'aac'].index(self.attributes["format"])
+        return ['ogg', 'mpeg', 'aac', 'flac'].index(self.attributes["format"])
 
     @property
     def protocol(self):

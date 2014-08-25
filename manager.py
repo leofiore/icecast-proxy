@@ -2,14 +2,21 @@ import threading
 import collections
 import logging
 import bcrypt
-from buffers import Buffer
+from StringIO import StringIO
 from audio import icecast
 from database import SQLManager, User, Mount
 
 
 logger = logging.getLogger('server.manager')
 STuple = collections.namedtuple('STuple', ['buffer', 'info'])
-ITuple = collections.namedtuple('ITuple', ['user', 'useragent', 'stream_name', 'source', 'mount', 'host', 'port'])
+ITuple = collections.namedtuple('ITuple', [
+    'user',
+    'useragent',
+    'stream_name',
+    'source',
+    'mount',
+    'host',
+    'port'])
 
 
 def generate_info(client):
@@ -122,7 +129,7 @@ class IcyContext(object):
         self.lock = threading.RLock()
 
         # Create a buffer that always returns an empty string (EOF)
-        self.eof_buffer = Buffer(1)
+        self.eof_buffer = StringIO('')
         self.eof_buffer.close()
 
         self.mount = client.mount

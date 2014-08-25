@@ -25,7 +25,7 @@ class Mount(Base):
     host = Column(String, nullable=False)
     port = Column(Integer)
     password = Column(String, nullable=False)
-    format = Column(Enum('ogg', 'mpeg', 'flac', 'aac'))
+    format = Column(Enum('ogg', 'mpeg', 'aac', 'flac'))
     protocol = Column(String, nullable=False)
     mount = Column(String, primary_key=True, nullable=False)
     name = Column(String, default=config.meta_name)
@@ -35,7 +35,9 @@ class Mount(Base):
     user = Column(String, default='source', nullable=False)
 
     def __repr__(self):
-        return "<Mount %s:%d%s %d>" % (self.host, self.port, self.destination)
+        return "<Mount %s -> %s:%d%s %s>" % (
+            self.source, self.host, self.port, self.mount, self.protocol
+        )
 
 
 engine = create_engine(config.connection)

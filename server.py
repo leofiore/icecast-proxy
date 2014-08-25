@@ -37,7 +37,9 @@ class IcyClient(dict):
                  informat="mpeg",
                  outformat="mpeg",
                  protocol=0,
-                 name=""):
+                 name="My Stream",
+                 url="http://radiocicletta.it",
+                 genre="Misc"):
         dict.__init__(self)
         self.attributes = {
             'audio_buffer': cStringTranscoder(
@@ -53,8 +55,8 @@ class IcyClient(dict):
             'format': outformat,
             'protocol': protocol,
             'name': name,
-            'url': '',
-            'genre': ''
+            'url': url,
+            'genre': 'Misc'
         }
 
     @property
@@ -466,16 +468,30 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                     mount = parsed_query['mount'][0]
                 except (KeyError, IndexError):
                     mount = ''
-                self.client = IcyClient(None, None, None, mount,
-                                        user, None, self.useragent, None)
+                for path in self.manager.lookup_destination(mount):
+                    client = IcyClient(
+                        path.host,
+                        path.port,
+                        path.source,
+                        path.mount,
+                        user=user,
+                        password=path.password,
+                        useragent=self.useragent,
+                        stream_name="",
+                        informat=path.format,
+                        outformat=path.format,
+                        protocol=path.protocol,
+                        name=path.name,
+                        url=path.url,
+                        genre=path.genre)
 
-                song = parsed_query.get('song', None)
-                encoding = parsed_query.get('charset', ['latin1'])
-                if not song is None:
-                    metadata = fix_encoding(song[0], encoding[0])
-                    self.manager.send_metadata(
-                        metadata=metadata,
-                        client=self.client)
+                    song = parsed_query.get('song', None)
+                    encoding = parsed_query.get('charset', ['latin1'])
+                    if not song is None:
+                        metadata = fix_encoding(song[0], encoding[0])
+                        self.manager.send_metadata(
+                            metadata=metadata,
+                            client=client)
 
                 # Send a response... although most clients just ignore this.
                 try:

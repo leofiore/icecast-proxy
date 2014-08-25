@@ -9,7 +9,7 @@ from database import SQLManager, User, Mount
 
 logger = logging.getLogger('server.manager')
 STuple = collections.namedtuple('STuple', ['buffer', 'info'])
-ITuple = collections.namedtuple('ITuple', ['user', 'useragent', 'stream_name'])
+ITuple = collections.namedtuple('ITuple', ['user', 'useragent', 'stream_name', 'source', 'mount', 'host', 'port'])
 
 
 def generate_info(client):
@@ -155,7 +155,11 @@ class IcyContext(object):
             ITuple(
                 source.user,
                 source.useragent,
-                source.stream_name
+                source.stream_name,
+                source.source,
+                source.mount,
+                source.host,
+                source.port
             ))
         logger.debug("Adding source '{source:s}' from '{context:s}'".format(
             source=repr(source_tuple),
@@ -173,7 +177,11 @@ class IcyContext(object):
             ITuple(
                 source.user,
                 source.useragent,
-                source.stream_name
+                source.stream_name,
+                source.source,
+                source.mount,
+                source.host,
+                source.port
             ))
         logger.debug("Removing source '{source:s}' from '{context:s}'".format(
             source=repr(source_tuple),
@@ -184,7 +192,7 @@ class IcyContext(object):
             sources=repr(self.sources))
         )
         # Close our buffer to make sure we EOF
-        source_tuple.buffer.close()
+        #source_tuple.buffer.close()
 
     @property
     def source(self):

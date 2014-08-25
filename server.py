@@ -34,10 +34,10 @@ class IcyClient(dict):
                  password,
                  useragent,
                  stream_name,
-                 informat,
-                 outformat,
-                 protocol,
-                 name):
+                 informat="mpeg",
+                 outformat="mpeg",
+                 protocol=0,
+                 name=""):
         dict.__init__(self)
         self.attributes = {
             'audio_buffer': cStringTranscoder(
@@ -153,13 +153,13 @@ class IcyClient(dict):
 
 class cStringTranscoder:
 
-    decode_flac = 'flac -s -d --force-raw-format --sign=signed --endian=little -o - -'
+    decode_flac = 'flac --totally-silent -s -d --force-raw-format --sign=signed --endian=little -o - -'
 
-    decode_mpeg = 'madplay -b 16 -R 44100 -S -o raw:- -'
-    encode_mpeg = 'lame --preset cbr 128 -r -s 44.1 --bitwidth 16 - -'
+    decode_mpeg = 'madplay -q -b 16 -R 44100 -S -o raw:- -'
+    encode_mpeg = 'lame --quiet --preset cbr 128 -r -s 44.1 --bitwidth 16 - -'
 
-    decode_ogg = 'oggdec -R -b 16 -e 0 -s 1 -o - -'
-    encode_ogg = 'oggenc -r -B 16 -C 2 -R 44100 --raw-endianness 0 -q 1.5 -'
+    decode_ogg = 'oggdec -Q -R -b 16 -e 0 -s 1 -o - -'
+    encode_ogg = 'oggenc -Q -r -B 16 -C 2 -R 44100 --raw-endianness 0 -q 1.5 -'
 
     def __init__(self, infmt, outfmt):
         self.buffer = StringIO()
@@ -169,6 +169,7 @@ class cStringTranscoder:
         self.mutex = threading.RLock()
         self.not_empty = threading.Condition(self.mutex)
         self.not_full = threading.Condition(self.mutex)
+        self.end = False
         if infmt == outfmt:
             self.decproc = None
             self.encproc = None
@@ -186,6 +187,8 @@ class cStringTranscoder:
             )
 
     def write(self, data_in):
+        if self.end:
+            return
         with self.not_full:
             while self.writepos - self.readpos == self.size:
                 self.not_full.wait()
@@ -193,8 +196,8 @@ class cStringTranscoder:
                 data_sent = False
                 data = None
                 try:
-                    logger.debug("writing on stdin decoder")
-                    while not data_sent and not data:
+                    while not self.end and not data_sent and not data:
+                        logger.debug("Processing encode/decode")
                         rlist, wlist, xlist = select(
                             [self.encproc.stdout, self.decproc.stdout],
                             [self.decproc.stdin],
@@ -202,12 +205,10 @@ class cStringTranscoder:
                             0.5
                         )
                         if len(wlist) and not data_sent:
-                            logger.debug("writing to decoder")
                             self.decproc.stdin.write(data_in)
                             data_sent = True
                             logger.debug("wrote to decoder")
                         if len(rlist) == 2:
-                            logger.debug("reading from encoder")
                             data = self.encproc.stdout.read(8192)
                             if not len(data):
                                 return
@@ -229,6 +230,8 @@ class cStringTranscoder:
             self.not_empty.notify()
 
     def read(self, size):
+        if self.end:
+            return
         with self.not_empty:
             while self.writepos - self.readpos == 0:
                 self.not_empty.wait()
@@ -246,17 +249,22 @@ class cStringTranscoder:
         return data
 
     def close(self):
-        self.buffer.close()
+        self.end = True
+        try:
+            self.buffer.close()
+            del self.buffer
+        except Exception as e:
+            logger.error(e)
         try:
             if self.encproc:
+                self.encproc.stdout.close()
                 self.encproc.kill()
-                self.encproc.wait()
             if self.decproc:
-                self.decproc.send_signal(13) # SIGPIPE
+                self.decproc.stdin.close()
+                self.decproc.stdout.close()
                 self.decproc.kill()
-                self.decproc.wait()
-        except:
-            pass
+        except Exception as e:
+            logger.error(e)
         logger.debug("client closed")
 
 
@@ -415,7 +423,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             % len(self.icy_client))
         try:
             while True:
-                rlist, wlist, xlist = select([self.rfile], [], [], 100)
+                rlist, wlist, xlist = select([self.rfile], [], [], 1)
                 if not len(rlist):
                     continue
                 data = self.rfile.read(4096)
@@ -427,10 +435,10 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             logger.exception("Timeout occured (most likely)")
         finally:
             logger.info("source: User '%s' logged off.", user)
-            for client in self.icy_client:
-                self.manager.remove_source(client)
-                self.icy_client.remove(client)
+            while len(self.icy_client):
+                client = self.icy_client.pop()
                 client.terminate()
+                self.manager.remove_source(client)
 
     def do_GET(self):
         self.useragent = self.headers.get('User-Agent', None)
@@ -459,8 +467,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                 except (KeyError, IndexError):
                     mount = ''
                 self.client = IcyClient(None, None, None, mount,
-                                        user, None, self.useragent, None,
-                                        None, None, None)
+                                        user, None, self.useragent, None)
 
                 song = parsed_query.get('song', None)
                 encoding = parsed_query.get('charset', ['latin1'])

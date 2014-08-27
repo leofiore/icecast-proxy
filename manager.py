@@ -28,7 +28,8 @@ def generate_info(client):
             'name': client.name,
             'url': client.url,
             'genre': client.genre,
-            'mount': client.mount}
+            'mount': client.mount,
+            'bitrate': client.bitrate}
 
 
 class IcyManager(object):

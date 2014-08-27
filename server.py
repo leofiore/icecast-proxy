@@ -39,7 +39,8 @@ class IcyClient(dict):
                  protocol=0,
                  name="My Stream",
                  url="http://radiocicletta.it",
-                 genre="Misc"):
+                 genre="Misc",
+                 bitrate=16):
         dict.__init__(self)
         self.attributes = {
             'audio_buffer': cStringTranscoder(
@@ -56,7 +57,8 @@ class IcyClient(dict):
             'protocol': protocol,
             'name': name,
             'url': url,
-            'genre': 'Misc'
+            'genre': genre,
+            'bitrate': bitrate
         }
 
     @property
@@ -114,6 +116,10 @@ class IcyClient(dict):
     @property
     def genre(self):
         return self.attributes['genre']
+
+    @property
+    def bitrate(self):
+        return self.attributes["bitrate"]
 
     def write(self, data):
         self.attributes['audio_buffer'].write(data)
@@ -412,7 +418,9 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                     informat=fmt,
                     outformat=path.format,
                     protocol=path.protocol,
-                    name=path.name)
+                    name=path.name,
+                    bitrate=self.source_bitrate
+                )
             )
             try:
                 self.manager.register_source(self.icy_client[-1])

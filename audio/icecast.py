@@ -10,11 +10,12 @@ logger = logging.getLogger('audio.icecast')
 class Icecast(object):
     connecting_timeout = 5.0
 
-    def __init__(self, source, config):
+    def __init__(self, source, config, audio_info):
         super(Icecast, self).__init__()
         self.config = (config if isinstance(config, IcecastConfig)
                        else IcecastConfig(config))
         self.source = source
+        self._saved_audio_info = audio_info
 
         self._shout = self.setup_libshout()
 
@@ -66,6 +67,10 @@ class Icecast(object):
                     self.set_metadata(self._saved_meta)
                     del self._saved_meta
 
+                if hasattr(self, '_saved_audio_info'):
+                    self.set_audio_info(self._saved_audio_info)
+                    del self._saved_audio_info
+
                 buff = self.source.read(8192)
                 if buff == b'':
                     # EOF received
@@ -111,6 +116,13 @@ class Icecast(object):
         except (pylibshout.ShoutException) as err:
             logger.exception("Failed sending metadata. No action taken.")
             self._saved_meta = metadata
+
+    def set_audio_info(self, audio_info):
+        try:
+            self._shout.audio_info = audio_info
+        except (pylibshout.ShoutException) as err:
+            logger.exception("Failed sending audio_info. No action taken.")
+            self._saved_audio_info = audio_info
 
     def setup_libshout(self):
         """Internal method

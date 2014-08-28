@@ -40,7 +40,11 @@ class IcyClient(dict):
                  name="My Stream",
                  url="http://radiocicletta.it",
                  genre="Misc",
-                 bitrate=16):
+                 bitrate=16,
+                 samplerate=44100,
+                 channels=2,
+                 quality=1):
+
         dict.__init__(self)
         self.attributes = {
             'audio_buffer': cStringTranscoder(
@@ -58,7 +62,10 @@ class IcyClient(dict):
             'name': name,
             'url': url,
             'genre': genre,
-            'bitrate': bitrate
+            'bitrate': bitrate,
+            'samplerate': samplerate,
+            'channels': channels,
+            'quality': quality
         }
 
     @property
@@ -120,6 +127,18 @@ class IcyClient(dict):
     @property
     def bitrate(self):
         return self.attributes["bitrate"]
+
+    @property
+    def samplerate(self):
+        return self.attributes["samplerate"]
+
+    @property
+    def channels(self):
+        return self.attributes["channels"]
+
+    @property
+    def quality(self):
+        return self.attributes["quality"]
 
     def write(self, data):
         self.attributes['audio_buffer'].write(data)

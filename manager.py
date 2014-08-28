@@ -20,16 +20,21 @@ ITuple = collections.namedtuple('ITuple', [
 
 
 def generate_info(client):
-    return {'host': client.host,
-            'port': client.port,
-            'password': client.password,
-            'format': client.format,
-            'protocol': client.protocol,
-            'name': client.name,
-            'url': client.url,
-            'genre': client.genre,
-            'mount': client.mount,
-            'bitrate': client.bitrate}
+    return (
+        {'host': client.host,
+         'port': client.port,
+         'password': client.password,
+         'format': client.format,
+         'protocol': client.protocol,
+         'name': client.name,
+         'url': client.url,
+         'genre': client.genre,
+         'mount': client.mount},
+
+        {'bitrate': client.bitrate,
+         'samplerate': client.samplerate,
+         'channels': client.channels,
+         'quality': client.quality})
 
 
 class IcyManager(object):
@@ -138,9 +143,10 @@ class IcyContext(object):
         # STuple(source, ITuple(user, useragent, stream_name))
         self.sources = collections.deque()
 
-        self.icecast_info = generate_info(client)
+        self.icecast_info, self.saved_audio_info = generate_info(client)
         #self.icecast_info = client
-        self.icecast = icecast.Icecast(self, self.icecast_info)
+        self.icecast = icecast.Icecast(
+            self, self.icecast_info, self.saved_audio_info)
 
         self.saved_metadata = {}
 
@@ -228,6 +234,9 @@ class IcyContext(object):
                 else:
                     # No saved metadata, send an empty one
                     self.icecast.set_metadata(u'')
+                if source in self.saved_audio_info:
+                    audio_info = self.saved_audio_info[source]
+                    self.icecast.set_audio_info(audio_info)
             self.current_source = source
             return source.buffer
 

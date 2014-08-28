@@ -131,6 +131,7 @@ class Icecast(object):
         """
         shout = pylibshout.Shout(tag_fix=False)
         self.config.setup(shout)
+        shout.audio_info = self._saved_audio_info
         return shout
 
     def reboot_libshout(self):

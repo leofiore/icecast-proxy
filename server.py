@@ -14,7 +14,7 @@ from BaseHTTPandICEServer import HTTPServer, BaseHTTPRequestHandler
 from SocketServer import ThreadingMixIn, BaseServer
 from manager import IcyClient
 from select import select
-from collection import namedtuple
+from collections import namedtuple
 
 
 socket.setdefaulttimeout(5.0)

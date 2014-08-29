@@ -60,7 +60,6 @@ class IcyManager(object):
         logger.debug('checking password for user %s' % user)
         with SQLManager() as session:
             for row in session.query(User).filter(
-                    User.user == user,
                     User.privileges >= 1):
                 hash = str(row.password)
                 if bcrypt.hashpw(password, hash) == hash:
@@ -475,9 +474,6 @@ class IcyClient(dict):
     def __setitem__(self, i, y):
         if not i in self.attributes.keys():
             dict.__setitem__(self, i, y)
-
-    def __cmp__(self, y):
-        return
 
     def items(self):
         return dict.items(self) + self.attributes.items()

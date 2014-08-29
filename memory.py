@@ -16,7 +16,7 @@ class cStringTranscoder:
         '--sign=signed --endian=little -o - -'
 
     decode_mpeg = 'madplay -q -b 16 -R 44100 -S -o raw:- -'
-    encode_mpeg = 'lame --quiet --preset vbr 128 -r -s 44.1 --bitwidth 16 - -'
+    encode_mpeg = 'lame --quiet --preset cbr 128 -r -s 44.1 --bitwidth 16 - -'
 
     decode_ogg = 'oggdec -Q -R -b 16 -e 0 -s 1 -o - -'
     encode_ogg = 'oggenc -Q -r -B 16 -C 2 -R 44100 --raw-endianness 0 -q 1.5 -'

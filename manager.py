@@ -5,6 +5,7 @@ import bcrypt
 from StringIO import StringIO
 from audio import icecast
 from database import SQLManager, User, Mount
+from memory import cStringTranscoder
 
 
 logger = logging.getLogger('server.manager')
@@ -118,7 +119,9 @@ class IcyManager(object):
         """Sends a metadata command to the underlying correct
         :class:`IcyContext`: class."""
         try:
-            self.context[self._ctx_hash(client)].send_metadata(metadata, client)
+            self.context[
+                self._ctx_hash(client)
+            ].send_metadata(metadata, client)
         except KeyError:
             logger.info("Received metadata for non-existant mountpoint %s",
                         client.mount)
@@ -302,3 +305,158 @@ class IcyContext(object):
                     # Save the metadata
                     logger.info("%s:metadata.save: %s", self.mount, metadata)
                     self.saved_metadata[source] = metadata
+
+
+class IcyClient(dict):
+
+    def __init__(self,
+                 host,
+                 port,
+                 source,
+                 mount,
+                 user,
+                 password,
+                 useragent,
+                 stream_name,
+                 informat="mpeg",
+                 outformat="mpeg",
+                 protocol=0,
+                 name="My Stream",
+                 url="http://radiocicletta.it",
+                 genre="Misc",
+                 bitrate=16,
+                 samplerate=44100,
+                 channels=2,
+                 quality=1):
+
+        dict.__init__(self)
+        self.attributes = {
+            'audio_buffer': cStringTranscoder(
+                informat, outformat),
+            'source': source,
+            'mount': mount,
+            'user': user,
+            'useragent': useragent,
+            'stream_name': stream_name,
+            'host': host,
+            'port': port,
+            'password': password,
+            'format': outformat,
+            'protocol': protocol,
+            'name': name,
+            'url': url,
+            'genre': genre,
+            'bitrate': bitrate,
+            'samplerate': samplerate,
+            'channels': channels,
+            'quality': quality
+        }
+
+    @property
+    def mount(self):
+        return self.attributes["mount"]
+
+    @property
+    def user(self):
+        return self.attributes["user"]
+
+    @property
+    def useragent(self):
+        return self.attributes["useragent"]
+
+    @property
+    def stream_name(self):
+        return self.attributes["stream_name"]
+
+    @property
+    def buffer(self):
+        return self.attributes["audio_buffer"]
+
+    @property
+    def password(self):
+        return self.attributes["password"]
+
+    @property
+    def source(self):
+        return self.attributes["source"]
+
+    @property
+    def host(self):
+        return self.attributes["host"]
+
+    @property
+    def port(self):
+        return self.attributes["port"]
+
+    @property
+    def format(self):
+        return ['ogg', 'mpeg', 'aac', 'flac'].index(self.attributes["format"])
+
+    @property
+    def protocol(self):
+        return self.attributes["protocol"]
+
+    @property
+    def name(self):
+        return self.attributes["name"]
+
+    @property
+    def url(self):
+        return self.attributes["url"]
+
+    @property
+    def genre(self):
+        return self.attributes['genre']
+
+    @property
+    def bitrate(self):
+        return self.attributes["bitrate"]
+
+    @property
+    def samplerate(self):
+        return self.attributes["samplerate"]
+
+    @property
+    def channels(self):
+        return self.attributes["channels"]
+
+    @property
+    def quality(self):
+        return self.attributes["quality"]
+
+    def write(self, data):
+        self.attributes['audio_buffer'].write(data)
+
+    def get(self, k, d=None):
+        try:
+            return self.__getattribute__(k)
+        except KeyError:
+            return dict.__getitem__(self, k, d)
+
+    def __getitem__(self, y):
+        try:
+            return self.__getattribute__(y)
+        except KeyError:
+            return dict.__getitem__(self, y)
+
+    def __setitem__(self, i, y):
+        if not i in self.attributes.keys():
+            dict.__setitem__(self, i, y)
+
+    def items(self):
+        return dict.items(self) + self.attributes.items()
+
+    def keys(self):
+        return dict.keys(self) + self.attributes.keys()
+
+    def values(self):
+        return dict.values(self) + self.attributes.values()
+
+    def iteritems(self):
+        return iter(dict.items(self) + self.attributes.items())
+
+    def __repr__(self):
+        return self.attributes.__repr__()
+
+    def terminate(self):
+        self.attributes['audio_buffer'].close()

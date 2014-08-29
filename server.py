@@ -12,287 +12,16 @@ import signal
 from cgi import escape as esc
 from BaseHTTPandICEServer import HTTPServer, BaseHTTPRequestHandler
 from SocketServer import ThreadingMixIn, BaseServer
-from subprocess import Popen, PIPE
+from manager import IcyClient
 from select import select
-from cStringIO import StringIO
+from collection import namedtuple
 
 
 socket.setdefaulttimeout(5.0)
-# Go about 192kbps (24kB/s) times two for a 2 second buffer
-MAX_BUFFER = 24 * 1024 * 2
 logger = logging.getLogger('server')
-
-
-class IcyClient(dict):
-
-    def __init__(self,
-                 host,
-                 port,
-                 source,
-                 mount,
-                 user,
-                 password,
-                 useragent,
-                 stream_name,
-                 informat="mpeg",
-                 outformat="mpeg",
-                 protocol=0,
-                 name="My Stream",
-                 url="http://radiocicletta.it",
-                 genre="Misc",
-                 bitrate=16,
-                 samplerate=44100,
-                 channels=2,
-                 quality=1):
-
-        dict.__init__(self)
-        self.attributes = {
-            'audio_buffer': cStringTranscoder(
-                informat, outformat),
-            'source': source,
-            'mount': mount,
-            'user': user,
-            'useragent': useragent,
-            'stream_name': stream_name,
-            'host': host,
-            'port': port,
-            'password': password,
-            'format': outformat,
-            'protocol': protocol,
-            'name': name,
-            'url': url,
-            'genre': genre,
-            'bitrate': bitrate,
-            'samplerate': samplerate,
-            'channels': channels,
-            'quality': quality
-        }
-
-    @property
-    def mount(self):
-        return self.attributes["mount"]
-
-    @property
-    def user(self):
-        return self.attributes["user"]
-
-    @property
-    def useragent(self):
-        return self.attributes["useragent"]
-
-    @property
-    def stream_name(self):
-        return self.attributes["stream_name"]
-
-    @property
-    def buffer(self):
-        return self.attributes["audio_buffer"]
-
-    @property
-    def password(self):
-        return self.attributes["password"]
-
-    @property
-    def source(self):
-        return self.attributes["source"]
-
-    @property
-    def host(self):
-        return self.attributes["host"]
-
-    @property
-    def port(self):
-        return self.attributes["port"]
-
-    @property
-    def format(self):
-        return ['ogg', 'mpeg', 'aac', 'flac'].index(self.attributes["format"])
-
-    @property
-    def protocol(self):
-        return self.attributes["protocol"]
-
-    @property
-    def name(self):
-        return self.attributes["name"]
-
-    @property
-    def url(self):
-        return self.attributes["url"]
-
-    @property
-    def genre(self):
-        return self.attributes['genre']
-
-    @property
-    def bitrate(self):
-        return self.attributes["bitrate"]
-
-    @property
-    def samplerate(self):
-        return self.attributes["samplerate"]
-
-    @property
-    def channels(self):
-        return self.attributes["channels"]
-
-    @property
-    def quality(self):
-        return self.attributes["quality"]
-
-    def write(self, data):
-        self.attributes['audio_buffer'].write(data)
-
-    def get(self, k, d=None):
-        try:
-            return self.__getattribute__(k)
-        except KeyError:
-            return dict.__getitem__(self, k, d)
-
-    def __getitem__(self, y):
-        try:
-            return self.__getattribute__(y)
-        except KeyError:
-            return dict.__getitem__(self, y)
-
-    def __setitem__(self, i, y):
-        if not i in self.attributes.keys():
-            dict.__setitem__(self, i, y)
-
-    def items(self):
-        return dict.items(self) + self.attributes.items()
-
-    def keys(self):
-        return dict.keys(self) + self.attributes.keys()
-
-    def values(self):
-        return dict.values(self) + self.attributes.values()
-
-    def iteritems(self):
-        return iter(dict.items(self) + self.attributes.items())
-
-    def __repr__(self):
-        return self.attributes.__repr__()
-
-    def terminate(self):
-        self.attributes['audio_buffer'].close()
-
-
-class cStringTranscoder:
-
-    decode_flac = 'flac --totally-silent -s -d --force-raw-format --sign=signed --endian=little -o - -'
-
-    decode_mpeg = 'madplay -q -b 16 -R 44100 -S -o raw:- -'
-    encode_mpeg = 'lame --quiet --preset cbr 128 -r -s 44.1 --bitwidth 16 - -'
-
-    decode_ogg = 'oggdec -Q -R -b 16 -e 0 -s 1 -o - -'
-    encode_ogg = 'oggenc -Q -r -B 16 -C 2 -R 44100 --raw-endianness 0 -q 1.5 -'
-
-    def __init__(self, infmt, outfmt):
-        self.buffer = StringIO()
-        self.readpos = 0
-        self.writepos = 0
-        self.size = MAX_BUFFER
-        self.mutex = threading.RLock()
-        self.not_empty = threading.Condition(self.mutex)
-        self.not_full = threading.Condition(self.mutex)
-        self.end = False
-        if infmt == outfmt:
-            self.decproc = None
-            self.encproc = None
-        else:
-            logger.info("Buffer will activate transcoding")
-            dec = getattr(self, 'decode_' + infmt)
-            enc = getattr(self, 'encode_' + outfmt)
-            self.decproc = Popen(
-                dec.split(),
-                stdin=PIPE, stdout=PIPE
-            )
-            self.encproc = Popen(
-                enc.split(),
-                stdin=self.decproc.stdout, stdout=PIPE
-            )
-
-    def write(self, data_in):
-        if self.end:
-            return
-        with self.not_full:
-            while self.writepos - self.readpos == self.size:
-                self.not_full.wait()
-            if self.decproc and self.encproc:
-                data_sent = False
-                data = None
-                try:
-                    while not self.end and not data_sent and not data:
-                        logger.debug("Processing encode/decode")
-                        rlist, wlist, xlist = select(
-                            [self.encproc.stdout, self.decproc.stdout],
-                            [self.decproc.stdin],
-                            [],
-                            0.5
-                        )
-                        if len(wlist) and not data_sent:
-                            self.decproc.stdin.write(data_in)
-                            data_sent = True
-                            logger.debug("wrote to decoder")
-                        if len(rlist) == 2:
-                            data = self.encproc.stdout.read(8192)
-                            if not len(data):
-                                return
-                            logger.debug("read from encoder %s", len(data))
-                        elif not len(rlist) and data_sent:
-                            return
-                except IOError as err:
-                    logger.error(err)
-            else:
-                data = data_in
-            if not data:
-                return
-            self.buffer.seek(self.writepos)
-            self.buffer.write(data)
-            self.writepos = self.buffer.tell()
-            if self.writepos > MAX_BUFFER:
-                self.size = self.writepos
-                self.writepos = 0
-            self.not_empty.notify()
-
-    def read(self, size):
-        if self.end:
-            return
-        with self.not_empty:
-            while self.writepos - self.readpos == 0:
-                self.not_empty.wait()
-            while self.writepos < (self.readpos + size) % self.size:
-                self.not_empty.wait()
-            self.buffer.seek(self.readpos)
-            data = self.buffer.read(min(size, self.size - self.readpos))
-            oldpos = self.readpos
-            self.readpos = self.buffer.tell()
-            if self.writepos < oldpos and self.readpos >= self.size:
-                self.readpos = 0
-            elif oldpos < self.writepos <= self.readpos:
-                self.readpos = self.writepos
-            self.not_full.notify()
-        return data
-
-    def close(self):
-        self.end = True
-        try:
-            self.buffer.close()
-            del self.buffer
-        except Exception as e:
-            logger.error(e)
-        try:
-            if self.encproc:
-                self.encproc.stdout.close()
-                self.encproc.kill()
-            if self.decproc:
-                self.decproc.stdin.close()
-                self.decproc.stdout.close()
-                self.decproc.kill()
-        except Exception as e:
-            logger.error(e)
-        logger.debug("client closed")
+MetadataTuple = namedtuple(
+    'MetadataTuple',
+    ['source', 'host', 'port', 'mount'])
 
 
 server_header = u"""
@@ -388,6 +117,80 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         except IOError as err:
             logger.exception("Error in request handler")
 
+    def _serve_metadata(self, parsed_url, parsed_query, user, password):
+        try:
+            mount = parsed_query['mount'][0]
+        except (KeyError, IndexError):
+            mount = ''
+        for path in self.manager.lookup_destination(mount):
+            client = MetadataTuple(
+                path.source,
+                path.host,
+                path.port,
+                path.mount
+            )
+
+            song = parsed_query.get('song', None)
+            encoding = parsed_query.get('charset', ['latin1'])
+            if not song is None:
+                metadata = fix_encoding(song[0], encoding[0])
+                self.manager.send_metadata(
+                    metadata=metadata,
+                    client=client)
+
+        # Send a response... although most clients just ignore this.
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/xml")
+            self.send_header("Content-Length", "113")
+            self.end_headers()
+
+            self.wfile.write(
+                '<?xml version="1.0"?>\n<iceresponse>'
+                '<message>Metadata update successful</message>'
+                '<return>1</return></iceresponse>')
+        except IOError as err:
+            if hasattr(err, 'errno') and err.errno == 32:
+                #logger.warning("Broken pipe exception, ignoring")
+                pass
+            else:
+                logger.exception("Error in request handler")
+
+    def _serve_listclients(self, parsed_url, parsed_query, user, password):
+        auth = "{:s}:{:s}".format('source', config.icecast_pass)
+        auth = auth.encode('base64')
+        url = urlparse.urlparse('http://{:s}:{:d}/'.format(
+            config.icecast_host,
+            config.icecast_port)
+        )
+        url = url[:2] + parsed_url[2:]
+        url = urlparse.urlunparse(url)
+
+        request = urllib2.Request(url)
+        request.add_header('User-Agent', self.useragent)
+        request.add_header('Authorization', 'Basic {:s}'.format(auth))
+
+        try:
+            result = urllib2.urlopen(request).read()
+        except urllib2.HTTPError as err:
+            self.send_response(err.code)
+            self.end_headers()
+            return
+        except urllib2.URLError as err:
+            self.send_response(501)
+            self.end_headers()
+            return
+
+        result_length = len(result)
+
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/xml')
+        self.send_header('Content-Length', str(result_length))
+        self.end_headers()
+
+        self.wfile.write(result)
+
+
     def do_SOURCE(self):
         logger.debug(self.headers)
         self.useragent = self.headers.get('User-Agent', None)
@@ -452,7 +255,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             % len(self.icy_client))
         try:
             while True:
-                rlist, wlist, xlist = select([self.rfile], [], [], 1)
+                rlist, wlist, xlist = select([self.rfile], [], [], 0.5)
                 if not len(rlist):
                     continue
                 data = self.rfile.read(4096)
@@ -491,85 +294,9 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             if parsed_url.path == "/proxy":
                 self._serve_admin(parsed_url, parsed_query, user, password)
             elif parsed_url.path == "/admin/metadata":
-                try:
-                    mount = parsed_query['mount'][0]
-                except (KeyError, IndexError):
-                    mount = ''
-                for path in self.manager.lookup_destination(mount):
-                    client = IcyClient(
-                        path.host,
-                        path.port,
-                        path.source,
-                        path.mount,
-                        user=user,
-                        password=path.password,
-                        useragent=self.useragent,
-                        stream_name="",
-                        informat=path.format,
-                        outformat=path.format,
-                        protocol=path.protocol,
-                        name=path.name,
-                        url=path.url,
-                        genre=path.genre)
-
-                    song = parsed_query.get('song', None)
-                    encoding = parsed_query.get('charset', ['latin1'])
-                    if not song is None:
-                        metadata = fix_encoding(song[0], encoding[0])
-                        self.manager.send_metadata(
-                            metadata=metadata,
-                            client=client)
-
-                # Send a response... although most clients just ignore this.
-                try:
-                    self.send_response(200)
-                    self.send_header("Content-Type", "text/xml")
-                    self.send_header("Content-Length", "113")
-                    self.end_headers()
-
-                    self.wfile.write(
-                        '<?xml version="1.0"?>\n<iceresponse>'
-                        '<message>Metadata update successful</message>'
-                        '<return>1</return></iceresponse>')
-                except IOError as err:
-                    if hasattr(err, 'errno') and err.errno == 32:
-                        #logger.warning("Broken pipe exception, ignoring")
-                        pass
-                    else:
-                        logger.exception("Error in request handler")
+                self._serve_metadata(parsed_url, parsed_query, user, password)
             elif parsed_url.path == "/admin/listclients":
-                auth = "{:s}:{:s}".format('source', config.icecast_pass)
-                auth = auth.encode('base64')
-                url = urlparse.urlparse('http://{:s}:{:d}/'.format(
-                    config.icecast_host,
-                    config.icecast_port)
-                )
-                url = url[:2] + parsed_url[2:]
-                url = urlparse.urlunparse(url)
-
-                request = urllib2.Request(url)
-                request.add_header('User-Agent', self.useragent)
-                request.add_header('Authorization', 'Basic {:s}'.format(auth))
-
-                try:
-                    result = urllib2.urlopen(request).read()
-                except urllib2.HTTPError as err:
-                    self.send_response(err.code)
-                    self.end_headers()
-                    return
-                except urllib2.URLError as err:
-                    self.send_response(501)
-                    self.end_headers()
-                    return
-
-                result_length = len(result)
-
-                self.send_response(200)
-                self.send_header('Content-Type', 'text/xml')
-                self.send_header('Content-Length', str(result_length))
-                self.end_headers()
-
-                self.wfile.write(result)
+                self._serve_listclients(parsed_url, parsed_query, user, password)
         else:
             self.send_response(401)
             self.send_header(

@@ -6,6 +6,8 @@ from StringIO import StringIO
 from audio import icecast
 from database import SQLManager, User, Mount
 from memory import cStringTranscoder
+from datetime import datetime
+from calendar import timegm
 
 
 logger = logging.getLogger('server.manager')
@@ -57,7 +59,9 @@ class IcyManager(object):
                 return False
         logger.debug('checking password for user %s' % user)
         with SQLManager() as session:
-            for row in session.query(User).filter(User.privileges >= 1):
+            for row in session.query(User).filter(
+                    User.user == user,
+                    User.privileges >= 1):
                 hash = str(row.password)
                 if bcrypt.hashpw(password, hash) == hash:
                     logger.debug('Successful!')
@@ -84,8 +88,29 @@ class IcyManager(object):
                 context = IcyContext(client)
                 self.context[self._ctx_hash(client)] = context
         logger.info("%s Context(s): %s", len(self.context), self.context)
+
+        with SQLManager() as session:
+            for row in session.query(User).filter(User.user == client.user):
+                privileges = row.privileges
+
         with context:
-            context.append(client)
+            # sort sources by privileges (0 <- most to last -> N)
+            # and by timestamp (from newer to oldest)
+            latest = collections.deque()
+            while len(context):
+                s = context.pop()
+                if s.user == client.user and s.start < client.start:
+                    continue
+                else:
+                    if s.privileges > privileges:
+                        latest.append(client)
+                        break
+                    else:
+                        latest.append(s)
+
+            while len(latest):
+                context.append(latest.pop())
+
             if not context.icecast.connected():
                 try:
                     context.start_icecast()
@@ -352,7 +377,8 @@ class IcyClient(dict):
             'bitrate': outbitrate,
             'samplerate': samplerate,
             'channels': channels,
-            'quality': quality
+            'quality': quality,
+            'timestamp': timegm(datetime.utcnow().timetuple())
         }
 
     @property
@@ -427,6 +453,10 @@ class IcyClient(dict):
     def quality(self):
         return self.attributes["quality"]
 
+    @property
+    def start(self):
+        return self.attributes["timestamp"]
+
     def write(self, data):
         self.attributes['audio_buffer'].write(data)
 
@@ -445,6 +475,9 @@ class IcyClient(dict):
     def __setitem__(self, i, y):
         if not i in self.attributes.keys():
             dict.__setitem__(self, i, y)
+
+    def __cmp__(self, y):
+        return
 
     def items(self):
         return dict.items(self) + self.attributes.items()

@@ -324,7 +324,8 @@ class IcyClient(dict):
                  name="My Stream",
                  url="http://radiocicletta.it",
                  genre="Misc",
-                 bitrate=16,
+                 inbitrate=16,
+                 outbitrate=128,
                  samplerate=44100,
                  channels=2,
                  quality=1):
@@ -332,7 +333,9 @@ class IcyClient(dict):
         dict.__init__(self)
         self.attributes = {
             'audio_buffer': cStringTranscoder(
-                informat, outformat),
+                (informat, inbitrate),
+                (outformat, outbitrate)
+            ),
             'source': source,
             'mount': mount,
             'user': user,
@@ -346,7 +349,7 @@ class IcyClient(dict):
             'name': name,
             'url': url,
             'genre': genre,
-            'bitrate': bitrate,
+            'bitrate': outbitrate,
             'samplerate': samplerate,
             'channels': channels,
             'quality': quality

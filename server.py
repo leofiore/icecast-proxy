@@ -241,7 +241,8 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                     outformat=path.format,
                     protocol=path.protocol,
                     name=path.name,
-                    bitrate=self.source_bitrate
+                    inbitrate=self.source_bitrate,
+                    outbitrate=path.bitrate
                 )
             )
             try:

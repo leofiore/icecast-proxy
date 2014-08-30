@@ -14,6 +14,7 @@ logger = logging.getLogger('server.manager')
 STuple = collections.namedtuple('STuple', ['buffer', 'info'])
 ITuple = collections.namedtuple('ITuple', [
     'user',
+    'privileges',
     'useragent',
     'stream_name',
     'source',
@@ -60,11 +61,12 @@ class IcyManager(object):
         logger.debug('checking password for user %s' % user)
         with SQLManager() as session:
             for row in session.query(User).filter(
-                    User.privileges >= 1):
+                    User.user == user,
+                    User.privileges >= 0):
                 hash = str(row.password)
                 if bcrypt.hashpw(password, hash) == hash:
                     logger.debug('Successful!')
-                    return True
+                    return row
             return False
 
     def lookup_destination(self, mount):
@@ -88,10 +90,6 @@ class IcyManager(object):
                 self.context[self._ctx_hash(client)] = context
         logger.info("%s Context(s): %s", len(self.context), self.context)
 
-        with SQLManager() as session:
-            for row in session.query(User).filter(User.user == client.user):
-                privileges = row.privileges
-
         with context:
             # sort sources by privileges (0 <- most to last -> N)
             # and by timestamp (from newer to oldest)
@@ -101,7 +99,7 @@ class IcyManager(object):
                 if s.user == client.user and s.start < client.start:
                     continue
                 else:
-                    if s.privileges > privileges:
+                    if s.privileges > client.privileges:
                         latest.append(client)
                         break
                     else:
@@ -189,12 +187,16 @@ class IcyContext(object):
             len(self.sources)
         )
 
+    def __len__(self):
+        return len(self.sources)
+
     def append(self, source):
         """Append a source client to the list of sources for this context."""
         source_tuple = STuple(
             source.buffer,
             ITuple(
                 source.user,
+                source.privileges,
                 source.useragent,
                 source.stream_name,
                 source.source,
@@ -210,6 +212,9 @@ class IcyContext(object):
         logger.debug("Current sources are '{sources:s}'.".format(
             sources=[repr(s) for s in self.sources])
         )
+
+    def pop(self):
+        self.sources.pop()
 
     def remove(self, source):
         """Remove a source client of the list of sources for this context."""
@@ -362,7 +367,8 @@ class IcyClient(dict):
             ),
             'source': source,
             'mount': mount,
-            'user': user,
+            'user': user.user,
+            'privileges': user.privileges,
             'useragent': useragent,
             'stream_name': stream_name,
             'host': host,
@@ -451,6 +457,10 @@ class IcyClient(dict):
     @property
     def quality(self):
         return self.attributes["quality"]
+
+    @property
+    def privileges(self):
+        return self.attributes["privileges"]
 
     @property
     def start(self):

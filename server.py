@@ -200,7 +200,8 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         fmt = re.search("(mpeg|ogg|flac)", self.source_content).groups()[0]
         self.source_bitrate = self.headers.get('ice-bitrate', None)
         user, password = self._get_login()
-        if (self.login(user=user, password=password)):
+        auth = self.login(user=user, password=password)
+        if auth:
             if user == 'source':
                 # No need to try; except because the self.login makes sure
                 # we can split it.
@@ -233,7 +234,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                     path.port,
                     path.source,
                     path.mount,
-                    user=user,
+                    user=auth,
                     password=path.password,
                     useragent=self.useragent,
                     stream_name=self.stream_name,
@@ -284,7 +285,8 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                     user, password = parsed_query['pass'][0].split('|', 1)
                 except (ValueError, IndexError, KeyError):
                     user, password = (None, None)
-        if (self.login(user=user, password=password)):
+        auth = self.login(user=user, password=password)
+        if auth:
             # Since the user and password are raw at this point we fix them up
             # If user is 'source' it means the actual user is still in the
             # password field.

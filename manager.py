@@ -100,10 +100,12 @@ class IcyManager(object):
                     continue
                 else:
                     if s.privileges > client.privileges:
-                        latest.append(client)
+                        context.append(s)
                         break
                     else:
                         latest.append(s)
+
+            context.append(client)
 
             while len(latest):
                 context.append(latest.pop())

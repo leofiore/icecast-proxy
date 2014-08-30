@@ -11,16 +11,6 @@ from calendar import timegm
 
 
 logger = logging.getLogger('server.manager')
-STuple = collections.namedtuple('STuple', ['buffer', 'info'])
-ITuple = collections.namedtuple('ITuple', [
-    'user',
-    'privileges',
-    'useragent',
-    'stream_name',
-    'source',
-    'mount',
-    'host',
-    'port'])
 
 
 def generate_info(client):
@@ -91,24 +81,7 @@ class IcyManager(object):
         logger.info("%s Context(s): %s", len(self.context), self.context)
 
         with context:
-            # sort sources by privileges (0 <- most to last -> N)
-            # and by timestamp (from newer to oldest)
-            latest = collections.deque()
-            while len(context):
-                s = context.pop()
-                if s.user == client.user and s.start < client.start:
-                    continue
-                else:
-                    if s.privileges > client.privileges:
-                        context.append(s)
-                        break
-                    else:
-                        latest.append(s)
-
             context.append(client)
-
-            while len(latest):
-                context.append(latest.pop())
 
             if not context.icecast.connected():
                 try:
@@ -166,8 +139,7 @@ class IcyContext(object):
         self.eof_buffer.close()
 
         self.mount = client.mount
-        # : Deque of tuples of the format
-        # STuple(source, ITuple(user, useragent, stream_name))
+        # : Deque of IcyClients
         self.sources = collections.deque()
 
         self.icecast_info, self.saved_audio_info = generate_info(client)
@@ -194,48 +166,40 @@ class IcyContext(object):
 
     def append(self, source):
         """Append a source client to the list of sources for this context."""
-        source_tuple = STuple(
-            source.buffer,
-            ITuple(
-                source.user,
-                source.privileges,
-                source.useragent,
-                source.stream_name,
-                source.source,
-                source.mount,
-                source.host,
-                source.port
-            ))
+        # sort sources by privileges (0 <- most to last -> N)
+        # and by timestamp (from newer to oldest)
+        latest = collections.deque()
+        while len(self.sources):
+            src = self.sources.pop()
+            if src.user == source.user and src.start < source.start:
+                continue  # getting rid of an old source
+            else:
+                if src.privileges > source.privileges:
+                    self.sources.append(src)
+                    break
+                else:
+                    latest.append(src)
+
         logger.debug("Adding source '{source:s}' from '{context:s}'".format(
-            source=repr(source_tuple),
+            source=repr(source),
             context=repr(self)
         ))
-        self.sources.append(source_tuple)
+        self.sources.append(source)
+
+        while len(latest):
+            self.sources.append(latest.pop())
+
         logger.debug("Current sources are '{sources:s}'.".format(
             sources=[repr(s) for s in self.sources])
         )
 
-    def pop(self):
-        return self.sources.pop()
-
     def remove(self, source):
         """Remove a source client of the list of sources for this context."""
-        source_tuple = STuple(
-            source.buffer,
-            ITuple(
-                source.user,
-                source.useragent,
-                source.stream_name,
-                source.source,
-                source.mount,
-                source.host,
-                source.port
-            ))
         logger.debug("Removing source '{source:s}' from '{context:s}'".format(
-            source=repr(source_tuple),
+            source=repr(source),
             context=repr(self)
         ))
-        self.sources.remove(source_tuple)
+        self.sources.remove(source)
         logger.debug("Current sources are '{sources:s}'.".format(
             sources=repr(self.sources))
         )
@@ -259,8 +223,8 @@ class IcyContext(object):
                     "%s: Changing source from '%s' to '%s'.",
                     self.mount,
                     'None' if self.current_source is None
-                    else self.current_source.info.user,
-                    source.info.user)
+                    else self.current_source.user,
+                    source.user)
                 # We changed source sir. Send saved metadata if any.
                 if source in self.saved_metadata:
                     metadata = self.saved_metadata[source]
@@ -325,14 +289,14 @@ class IcyContext(object):
             logger.warning("%s: Received metadata while we have no source.",
                            self.mount)
             return
-        if (source.info.user == client.user):
+        if (source.user == client.user):
             # Current source send metadata to us! yay
             logger.info("%s:metadata.update: %s", self.mount, metadata)
             self.saved_metadata[source] = metadata
             self.icecast.set_metadata(metadata)  # Lol consistent naming (not)
         else:
             for source in self.sources:
-                if (source.info.user == client.user):
+                if (source.user == client.user):
                     # Save the metadata
                     logger.info("%s:metadata.save: %s", self.mount, metadata)
                     self.saved_metadata[source] = metadata

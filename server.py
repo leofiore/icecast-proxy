@@ -97,10 +97,10 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                     metadata = self.manager.context[
                         mount].saved_metadata.get(source, u'')
                     send_buf.append(client_html.format(
-                        user=esc(source.info.user),
+                        user=esc(source.user),
                         meta=esc(metadata),
-                        agent=esc(source.info.useragent),
-                        stream_name=esc(source.info.stream_name),
+                        agent=esc(source.useragent),
+                        stream_name=esc(source.stream_name),
                         mount=esc(mount, True),
                         num=i,
                         disabled=disabled))
@@ -189,7 +189,6 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
         self.wfile.write(result)
-
 
     def do_SOURCE(self):
         logger.debug(self.headers)

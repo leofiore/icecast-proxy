@@ -214,7 +214,7 @@ class IcyContext(object):
         )
 
     def pop(self):
-        self.sources.pop()
+        return self.sources.pop()
 
     def remove(self, source):
         """Remove a source client of the list of sources for this context."""

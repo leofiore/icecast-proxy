@@ -52,12 +52,12 @@ class IcyManager(object):
     def login(self, user=None, password=None, privilege=1):
         if user is None or password is None:
             return False
-        if user == 'source':
-            try:
-                user, password = password.split('|')
-            except ValueError as err:
-                logger.error(err)
-                return False
+        #if user == 'source':
+            #try:
+            #    user, password = password.split('|')
+            #except ValueError as err:
+            #    logger.error(err)
+            #    return False
         logger.debug('checking password for user %s' % user)
         with SQLManager() as session:
             for row in session.query(User).filter(

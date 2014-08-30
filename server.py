@@ -200,30 +200,43 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         fmt = re.search("(mpeg|ogg|flac)", self.source_content).groups()[0]
         self.source_bitrate = self.headers.get('ice-bitrate', None)
         user, password = self._get_login()
+        if user == 'source' and "|" in password:
+            user, password = password.split('|')
         auth = self.login(user=user, password=password)
         if auth:
-            if user == 'source':
-                # No need to try; except because the self.login makes sure
-                # we can split it.
-                user, password = password.split('|')
             logger.info("source: User '%s' logged in correctly.", user)
             self.send_response(200)
             self.end_headers()
         else:
-            if user == 'source':
-                # We need to try; except here because we can't be certain
-                # it contains a | at all.
-                try:
-                    user, password = password.split('|')
-                except ValueError as err:
-                    logger.info("source: Failed login, no separator found "
-                                "from %s.", str(self.client_address))
-                else:
-                    logger.info("source: User '%s' failed to login from %s.",
-                                user, str(self.client_address))
+            logger.info("source: User '%s' failed to login from %s.",
+                        user, str(self.client_address))
             self.send_response(401)
             self.end_headers()
             return
+
+        #if auth:
+        #    if user == 'source':
+        #        # No need to try; except because the self.login makes sure
+        #        # we can split it.
+        #        user, password = password.split('|')
+        #    logger.info("source: User '%s' logged in correctly.", user)
+        #    self.send_response(200)
+        #    self.end_headers()
+        #else:
+        #    if user == 'source':
+        #        # We need to try; except here because we can't be certain
+        #        # it contains a | at all.
+        #        try:
+        #            user, password = password.split('|')
+        #        except ValueError as err:
+        #            logger.info("source: Failed login, no separator found "
+        #                        "from %s.", str(self.client_address))
+        #        else:
+        #            logger.info("source: User '%s' failed to login from %s.",
+        #                        user, str(self.client_address))
+        #    self.send_response(401)
+        #    self.end_headers()
+        #    return
 
         self.icy_client = []
         logger.debug('lookup for source mountpoint %s' % self.mount)

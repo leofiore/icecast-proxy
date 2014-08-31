@@ -77,7 +77,6 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             return login.decode("base64").split(":", 1)
 
     def _serve_admin(self, url, query, user, password):
-        # admin is 4 and higher
         is_admin = self.manager.login(
             user=user,
             password=password,
@@ -291,21 +290,19 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         parsed_url = urlparse.urlparse(self.path)
         parsed_query = urlparse.parse_qs(parsed_url.query)
         user, password = self._get_login()
-        if user is None and password is None:
-            if 'pass' in parsed_query:
-                try:
-                    user, password = parsed_query['pass'][0].split('|', 1)
-                except (ValueError, IndexError, KeyError):
-                    user, password = (None, None)
+        #if user or password is None:
+        #    if 'pass' in parsed_query:
+        #        try:
+        #            user, password = parsed_query['pass'][0].split('|', 1)
+        #        except (ValueError, IndexError, KeyError):
+        #            user = password = None
+        if user == 'source' and "|" in password:
+            user, password = password.split('|')
         auth = self.login(user=user, password=password)
         if auth:
             # Since the user and password are raw at this point we fix them up
             # If user is 'source' it means the actual user is still in the
             # password field.
-            if user == 'source':
-                # No need to try; except because the self.login makes sure
-                # we can split it.
-                user, password = password.split('|')
             if parsed_url.path == "/proxy":
                 self._serve_admin(parsed_url, parsed_query, user, password)
             elif parsed_url.path == "/admin/metadata":

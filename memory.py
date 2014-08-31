@@ -5,7 +5,7 @@ from select import select
 import logging
 
 
-logger = logging.getLogger('memory')
+logger = logging.getLogger('server.memory')
 MAX_BUFFER = 24 * 1024 * 2
 # Go about 192kbps (24kB/s) times two for a 2 second buffer
 

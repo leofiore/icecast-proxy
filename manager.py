@@ -42,12 +42,6 @@ class IcyManager(object):
     def login(self, user=None, password=None, privilege=1):
         if user is None or password is None:
             return False
-        #if user == 'source':
-            #try:
-            #    user, password = password.split('|')
-            #except ValueError as err:
-            #    logger.error(err)
-            #    return False
         logger.debug('checking password for user %s' % user)
         with SQLManager() as session:
             for row in session.query(User).filter(
@@ -65,19 +59,15 @@ class IcyManager(object):
         with SQLManager() as session:
             return session.query(Mount).filter(Mount.source == mount)
 
-    def _ctx_hash(self, client):
-        return ':'.join(
-            (client.source, client.host, str(client.port), client.mount))
-
     def register_source(self, client):
         """Register a connected icecast source to be used for streaming to
         the main server."""
         with self.context_lock:
             try:
-                context = self.context[self._ctx_hash(client)]
+                context = self.context[client]
             except KeyError:
                 context = IcyContext(client)
-                self.context[self._ctx_hash(client)] = context
+                self.context[client] = context
         logger.info("%s Context(s): %s", len(self.context), self.context)
 
         with context:
@@ -96,7 +86,7 @@ class IcyManager(object):
         sources to be used for streaming."""
         with self.context_lock:
             try:
-                context = self.context[self._ctx_hash(client)]
+                context = self.context[client]
             except KeyError:
                 # We can be sure there is no source when the mount is unknown
                 return
@@ -110,15 +100,14 @@ class IcyManager(object):
                 )
             finally:
                 if not context.sources:
+                    logger.debug("no sources for %s, will stop libshout", context)
                     context.stop_icecast()
 
     def send_metadata(self, metadata, client):
         """Sends a metadata command to the underlying correct
         :class:`IcyContext`: class."""
         try:
-            self.context[
-                self._ctx_hash(client)
-            ].send_metadata(metadata, client)
+            self.context[client ].send_metadata(metadata, client)
         except KeyError:
             logger.info("Received metadata for non-existant mountpoint %s",
                         client.mount)
@@ -171,15 +160,20 @@ class IcyContext(object):
         latest = collections.deque()
         while len(self.sources):
             src = self.sources.pop()
-            if src.user == source.user and src.start < source.start:
+            if src.user == source.user and  source.start - src.start > 10000:
                 src.terminate()
-                del src  # getting rid of an old source
+                latest.appendleft(src)
+                logger.debug(
+                    "Moving source '{source:s}' from '{context:s}'".format(
+                        source=repr(src),
+                        context=repr(self)
+                    ))
             else:
                 if src.privileges > source.privileges:
                     self.sources.append(src)
                     break
                 else:
-                    latest.append(src)
+                    latest.appendleft(src)
 
         logger.debug("Adding source '{source:s}' from '{context:s}'".format(
             source=repr(source),
@@ -187,8 +181,7 @@ class IcyContext(object):
         ))
         self.sources.append(source)
 
-        while len(latest):
-            self.sources.append(latest.pop())
+        self.sources.extend(latest)
 
         logger.debug("Current sources are '{sources:s}'.".format(
             sources=[repr(s) for s in self.sources])
@@ -200,7 +193,17 @@ class IcyContext(object):
             source=repr(source),
             context=repr(self)
         ))
-        self.sources.remove(source)
+        source.terminate()
+
+        least = collections.deque()
+        while len(self.sources):
+            src = self.sources.pop()
+            if hash(src) == hash(source) and src.start == source.start:
+                break
+            least.appendleft(src)
+
+        self.sources.extend(least)
+
         logger.debug("Current sources are '{sources:s}'.".format(
             sources=repr(self.sources))
         )
@@ -352,11 +355,11 @@ class IcyClient(dict):
             'quality': quality,
             'timestamp': timegm(datetime.utcnow().timetuple())
         }
+        self.is_active = True
 
     def __hash__(self):
         return hash(':'.join(
-            (str(self.start),
-             self.source,
+            (self.source,
              self.host,
              str(self.port),
              self.mount)))
@@ -442,7 +445,8 @@ class IcyClient(dict):
         return self.attributes["timestamp"]
 
     def write(self, data):
-        self.attributes['audio_buffer'].write(data)
+        if self.is_active:
+            self.attributes['audio_buffer'].write(data)
 
     def get(self, k, d=None):
         try:
@@ -477,4 +481,5 @@ class IcyClient(dict):
             (self.user, self.source, self.host, self.port, self.mount)
 
     def terminate(self):
+        self.is_active = False
         self.attributes['audio_buffer'].close()

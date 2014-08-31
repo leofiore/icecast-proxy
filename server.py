@@ -196,7 +196,14 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         self.stream_name = self.headers.get('ice-name', '<Unknown>')
         self.source_content = self.headers.get('Content-type', None)
         fmt = re.search("(mpeg|ogg|flac)", self.source_content).groups()[0]
-        self.source_bitrate = self.headers.get('ice-bitrate', None)
+
+        ice_audio_info = urlparse.parse_qs(
+            self.headers.get('ice-audio-info', '')
+        )
+        self.source_bitrate = self.headers.get(
+            'ice-bitrate',
+            ice_audio_info.get('ice-bitrate', None))
+
         user, password = self._get_login()
         if user == 'source' and "|" in password:
             user, password = password.split('|')
@@ -212,34 +219,10 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
-        #if auth:
-        #    if user == 'source':
-        #        # No need to try; except because the self.login makes sure
-        #        # we can split it.
-        #        user, password = password.split('|')
-        #    logger.info("source: User '%s' logged in correctly.", user)
-        #    self.send_response(200)
-        #    self.end_headers()
-        #else:
-        #    if user == 'source':
-        #        # We need to try; except here because we can't be certain
-        #        # it contains a | at all.
-        #        try:
-        #            user, password = password.split('|')
-        #        except ValueError as err:
-        #            logger.info("source: Failed login, no separator found "
-        #                        "from %s.", str(self.client_address))
-        #        else:
-        #            logger.info("source: User '%s' failed to login from %s.",
-        #                        user, str(self.client_address))
-        #    self.send_response(401)
-        #    self.end_headers()
-        #    return
-
-        self.icy_client = []
+        icy_client = []
         logger.debug('lookup for source mountpoint %s' % self.mount)
         for path in self.manager.lookup_destination(self.mount):
-            self.icy_client.append(
+            icy_client.append(
                 IcyClient(
                     path.host,
                     path.port,
@@ -258,14 +241,14 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                 )
             )
             try:
-                self.manager.register_source(self.icy_client[-1])
+                self.manager.register_source(icy_client[-1])
             except Exception as err:
                 logger.error(err)
-                self.icy_client.pop()
+                icy_client.pop()
                 continue
         logger.debug(
             'registered %d mountpoints destinations'
-            % len(self.icy_client))
+            % len(icy_client))
         try:
             while True:
                 rlist, wlist, xlist = select([self.rfile], [], [], 0.5)
@@ -274,15 +257,22 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                 data = self.rfile.read(4096)
                 if data == '':
                     break
-                for client in self.icy_client:
-                    client.write(data)
+                for client in icy_client:
+                    if client.is_active:
+                        client.write(data)
+                    else:
+                        icy_client.remove(client)
+                if not len(icy_client):
+                    logger.debug("Thread exiting since no more clients are active")
+                    self.rfile.close()
+                    return
+
         except:
             logger.exception("Timeout occured (most likely)")
         finally:
             logger.info("source: User '%s' logged off.", user)
-            while len(self.icy_client):
-                client = self.icy_client.pop()
-                client.terminate()
+            while len(icy_client):
+                client = icy_client.pop()
                 self.manager.remove_source(client)
 
     def do_GET(self):
@@ -290,12 +280,6 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         parsed_url = urlparse.urlparse(self.path)
         parsed_query = urlparse.parse_qs(parsed_url.query)
         user, password = self._get_login()
-        #if user or password is None:
-        #    if 'pass' in parsed_query:
-        #        try:
-        #            user, password = parsed_query['pass'][0].split('|', 1)
-        #        except (ValueError, IndexError, KeyError):
-        #            user = password = None
         if user == 'source' and "|" in password:
             user, password = password.split('|')
         auth = self.login(user=user, password=password)

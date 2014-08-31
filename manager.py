@@ -353,6 +353,14 @@ class IcyClient(dict):
             'timestamp': timegm(datetime.utcnow().timetuple())
         }
 
+    def __hash__(self):
+        return hash(':'.join(
+            (str(self.start),
+             self.source,
+             self.host,
+             str(self.port),
+             self.mount)))
+
     @property
     def mount(self):
         return self.attributes["mount"]

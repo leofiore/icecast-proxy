@@ -172,7 +172,8 @@ class IcyContext(object):
         while len(self.sources):
             src = self.sources.pop()
             if src.user == source.user and src.start < source.start:
-                continue  # getting rid of an old source
+                src.terminate()
+                del src  # getting rid of an old source
             else:
                 if src.privileges > source.privileges:
                     self.sources.append(src)
@@ -464,7 +465,8 @@ class IcyClient(dict):
         return iter(dict.items(self) + self.attributes.items())
 
     def __repr__(self):
-        return self.attributes.__repr__()
+        return "%s@%s %s:%s%s" % \
+            (self.user, self.source, self.host, self.port, self.mount)
 
     def terminate(self):
         self.attributes['audio_buffer'].close()

@@ -77,30 +77,28 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             return login.decode("base64").split(":", 1)
 
     def _serve_admin(self, url, query, user, password):
-        is_admin = self.manager.login(
+        auth = self.manager.login(
             user=user,
-            password=password,
-            privilege=3)
+            password=password)
         # disabled = u'disabled' if not is_admin else None
-        disabled = u'disabled'
-        # TODO kicking. maybe.
+        disabled = auth.privileges > 0 and u'disabled' or ''
         send_buf = []
         send_buf.append(server_header)
 
         for mount in self.manager.context:
             # only include if there is a source on there
             if self.manager.context[mount].sources:
-                send_buf.append(mount_header.format(mount=esc(mount)))
+                send_buf.append(mount_header.format(mount=mount))
                 for i, source in enumerate(
                         self.manager.context[mount].sources):
                     metadata = self.manager.context[
                         mount].saved_metadata.get(source, u'')
                     send_buf.append(client_html.format(
-                        user=esc(source.user),
-                        meta=esc(metadata),
-                        agent=esc(source.useragent),
-                        stream_name=esc(source.stream_name),
-                        mount=esc(mount, True),
+                        user=source.user,
+                        meta=metadata,
+                        agent=source.useragent,
+                        stream_name=source.stream_name,
+                        mount=mount,
                         num=i,
                         disabled=disabled))
                 send_buf.append('</table>\n')
@@ -287,7 +285,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             # Since the user and password are raw at this point we fix them up
             # If user is 'source' it means the actual user is still in the
             # password field.
-            if parsed_url.path == "/proxy":
+            if parsed_url.path == "/":
                 self._serve_admin(parsed_url, parsed_query, user, password)
             elif parsed_url.path == "/admin/metadata":
                 self._serve_metadata(parsed_url, parsed_query, user, password)

@@ -5,7 +5,7 @@ from database import SQLManager, User, Mount
 import bcrypt
 
 
-def cmd_users(action, username=None, password=None):
+def cmd_users(action, username=None, password=None, privileges=-1):
 
     with SQLManager() as session:
         if action == "list":
@@ -22,15 +22,24 @@ def cmd_users(action, username=None, password=None):
                     username
                 ))
             if yes.lower().strip() == "yes":
-                session.query(User).filter(User.user==username).delete()
+                session.query(User).filter(User.user == username).delete()
                 session.commit()
 
-        elif action == "add":
+        elif action in ("add", "superadd"):
             while not username or len(username) < 3:
-                username = raw_input("Please provide a username (3 chars min): ")
+                username = raw_input(
+                    "Please provide a username (3 chars min): ")
             while not password or len(password) < 5:
-                password = getpass.getpass("please provide a password (5 chars min): ")
-            for row in session.query(User).filter(User.user==username):
+                password = getpass.getpass(
+                    "please provide a password (5 chars min): ")
+            if action == "add":
+                while privileges < 1:
+                    privileges = raw_input(
+                        "Please provide a level of privileges (1 or higher): "
+                    )
+            elif action == "superadd":
+                privileges = 0
+            for row in session.query(User).filter(User.user == username):
                 print(
                     "A username with that name exists already. "
                     "Please provide another username or use the "
@@ -41,7 +50,7 @@ def cmd_users(action, username=None, password=None):
             session.add(User(
                 user=username,
                 password=cryptpw,
-                privileges=1))
+                privileges=privileges))
             session.commit()
 
 
@@ -50,9 +59,9 @@ def cmd_routes(action, *args):
     proto = ['http', 'xa', 'icy']
     with SQLManager() as session:
         if action == "list":
-            source =  args and args[0] or None
+            source = args and args[0] or None
             if source:
-                routes = session.query(Mount).filter(Mount.source==source).all()
+                routes = session.query(Mount).filter(Mount.source == source).all()
             else:
                 routes = session.query(Mount).order_by(Mount.source).all()
             routestr = " {source: <17} | {destination: <39} | {format: <17} "
@@ -67,7 +76,7 @@ def cmd_routes(action, *args):
                     source=route.source,
                     destination="".join(
                         [proto[int(route.protocol)], '://',
-                        route.host, ":",
+                         route.host, ":",
                          str(route.port),
                          route.mount]),
                     format=route.format
@@ -78,7 +87,8 @@ def cmd_routes(action, *args):
                 print(
                     "no arguments provided.\n\n"
                     "Syntax: routes add "
-                    "<proxy mount> <server> <port> <mount> <protocol> <format>")
+                    "<proxy mount> <server> <port> "
+                    "<mount> <protocol> <format>")
                 sys.exit(1)
             source, host, port, mount, protocol, format = args
             user = None
@@ -102,7 +112,7 @@ def cmd_routes(action, *args):
             session.commit()
 
         elif action == "del":
-            sys.exit(1) #TODO
+            sys.exit(1)  # TODO
 
 
 if __name__ == "__main__":

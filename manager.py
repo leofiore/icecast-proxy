@@ -39,7 +39,7 @@ class IcyManager(object):
         self.context_lock = threading.RLock()
         self.context = {}
 
-    def login(self, user=None, password=None, privilege=1):
+    def login(self, user=None, password=None):
         if user is None or password is None:
             return False
         logger.debug('checking password for user %s' % user)

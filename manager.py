@@ -332,8 +332,8 @@ class IcyClient(dict):
         dict.__init__(self)
         self.attributes = {
             'audio_buffer': cStringTranscoder(
-                (informat, inbitrate),
-                (outformat, outbitrate)
+                (informat.strip().lower(), int(inbitrate)),
+                (outformat.strip().lower(), int(outbitrate))
             ),
             'source': source,
             'mount': mount,

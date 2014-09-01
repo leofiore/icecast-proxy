@@ -207,11 +207,11 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         fmt = re.search("(mpeg|ogg|flac)", self.source_content).groups()[0]
 
         ice_audio_info = urlparse.parse_qs(
-            self.headers.get('ice-audio-info', 128)
+            self.headers.get('ice-audio-info', '')
         )
         self.source_bitrate = self.headers.get(
             'ice-bitrate',
-            "".join(ice_audio_info.get('bitrate', [])))
+            "".join(ice_audio_info.get('bitrate', ['128'])))
 
         user, password = self._get_login()
         if user == 'source' and "|" in password:

@@ -201,7 +201,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         )
         self.source_bitrate = self.headers.get(
             'ice-bitrate',
-            ice_audio_info.get('ice-bitrate', None))
+            "".join(ice_audio_info.get('bitrate', [])))
 
         user, password = self._get_login()
         if user == 'source' and "|" in password:
@@ -236,7 +236,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                     protocol=path.protocol,
                     name=path.name,
                     inbitrate=self.source_bitrate,
-                    outbitrate=path.bitrate
+                    outbitrate=path.bitrate or self.source_bitrate
                 )
             )
             try:

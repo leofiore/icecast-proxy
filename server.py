@@ -207,7 +207,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         fmt = re.search("(mpeg|ogg|flac)", self.source_content).groups()[0]
 
         ice_audio_info = urlparse.parse_qs(
-            self.headers.get('ice-audio-info', '')
+            self.headers.get('ice-audio-info', 128)
         )
         self.source_bitrate = self.headers.get(
             'ice-bitrate',

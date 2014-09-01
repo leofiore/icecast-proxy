@@ -121,17 +121,27 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             mount = ''
         for path in self.manager.lookup_destination(mount):
             client = MetadataTuple(
-                path.user,
+                user,
                 path.source,
                 path.host,
                 path.port,
                 path.mount
             )
 
+            logger.debug("Serving metadata for %s", client)
             song = parsed_query.get('song', None)
+            artist = parsed_query.get('artist', None)
+            title = parsed_query.get('title', None)
             encoding = parsed_query.get('charset', ['latin1'])
             if not song is None:
                 metadata = fix_encoding(song[0], encoding[0])
+                self.manager.send_metadata(
+                    metadata=metadata,
+                    client=client)
+            elif title and artist:
+                metadata = fix_encoding(
+                    "%s - %s" % (artist[0], title[0]),
+                    encoding[0])
                 self.manager.send_metadata(
                     metadata=metadata,
                     client=client)
@@ -278,7 +288,10 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         self.useragent = self.headers.get('User-Agent', None)
         parsed_url = urlparse.urlparse(self.path)
         parsed_query = urlparse.parse_qs(parsed_url.query)
+        logger.debug("Parsed query: %s", parsed_query)
         user, password = self._get_login()
+        if user and not password and 'pass' in parsed_query:
+            password = parsed_query['pass'][0]
         if user == 'source' and "|" in password:
             user, password = password.split('|')
         auth = self.login(user=user, password=password)

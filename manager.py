@@ -64,10 +64,10 @@ class IcyManager(object):
         the main server."""
         with self.context_lock:
             try:
-                context = self.context[client]
+                context = self.context[hash(client)]
             except KeyError:
                 context = IcyContext(client)
-                self.context[client] = context
+                self.context[hash(client)] = context
         logger.info("%s Context(s): %s", len(self.context), self.context)
 
         with context:
@@ -86,7 +86,7 @@ class IcyManager(object):
         sources to be used for streaming."""
         with self.context_lock:
             try:
-                context = self.context[client]
+                context = self.context[hash(client)]
             except KeyError:
                 # We can be sure there is no source when the mount is unknown
                 return
@@ -108,15 +108,13 @@ class IcyManager(object):
         :class:`IcyContext`: class."""
         try:
             if isinstance(client, IcyClient):
-                self.context[client].send_metadata(metadata, client)
+                self.context[hash(client)].send_metadata(metadata, client)
             else:
-                self.context[
-                    "%s@%s %s:%s%s" %
-                    (client.user,
-                     client.source,
+                self.context[hash(':'.join(
+                    (client.source,
                      client.host,
-                     client.port,
-                     client.mount)
+                     str(client.port),
+                     client.mount)))
                 ].send_metadata(metadata, client)
         except KeyError:
             logger.info("Received metadata for non-existant mountpoint %s",

@@ -107,7 +107,17 @@ class IcyManager(object):
         """Sends a metadata command to the underlying correct
         :class:`IcyContext`: class."""
         try:
-            self.context[client ].send_metadata(metadata, client)
+            if isinstance(client, IcyClient):
+                self.context[client].send_metadata(metadata, client)
+            else:
+                self.context[
+                    hash(":".join(
+                        [client.source,
+                         client.host,
+                         str(client.port),
+                         client.mount]
+                    ))
+                ].send_metadata(metadata, client)
         except KeyError:
             logger.info("Received metadata for non-existant mountpoint %s",
                         client.mount)

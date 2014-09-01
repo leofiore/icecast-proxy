@@ -6,9 +6,6 @@ import logging
 
 
 logger = logging.getLogger('server.memory')
-MAX_BUFFER = 24 * 1024 * 2
-# Go about 192kbps (24kB/s) times two for a 2 second buffer
-
 
 class cStringTranscoder:
 
@@ -25,7 +22,9 @@ class cStringTranscoder:
         self.buffer = StringIO()
         self.readpos = 0
         self.writepos = 0
-        self.size = MAX_BUFFER
+        # about 2 seconds of buffer (kbps / 8 * 1kB * 2)
+        self.max_buffer = outfmt[1] / 8 * 1024 * 2
+        self.size = self.max_buffer
         self.mutex = threading.RLock()
         self.not_empty = threading.Condition(self.mutex)
         self.not_full = threading.Condition(self.mutex)
@@ -84,7 +83,7 @@ class cStringTranscoder:
             self.buffer.seek(self.writepos)
             self.buffer.write(data)
             self.writepos = self.buffer.tell()
-            if self.writepos > MAX_BUFFER:
+            if self.writepos > self.max_buffer:
                 self.size = self.writepos
                 self.writepos = 0
             self.not_empty.notify()

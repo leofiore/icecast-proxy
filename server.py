@@ -21,7 +21,7 @@ socket.setdefaulttimeout(5.0)
 logger = logging.getLogger('server')
 MetadataTuple = namedtuple(
     'MetadataTuple',
-    ['source', 'host', 'port', 'mount'])
+    ['user', 'source', 'host', 'port', 'mount'])
 
 
 server_header = u"""
@@ -121,6 +121,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             mount = ''
         for path in self.manager.lookup_destination(mount):
             client = MetadataTuple(
+                path.user,
                 path.source,
                 path.host,
                 path.port,

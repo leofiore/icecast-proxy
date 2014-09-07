@@ -103,6 +103,10 @@ class IcyManager(object):
                     logger.debug("no sources for %s, will stop libshout", context)
                     context.stop_icecast()
 
+    def close(self):
+        for c in self.context.values():
+            self.remove_source(c)
+
     def send_metadata(self, metadata, client):
         """Sends a metadata command to the underlying correct
         :class:`IcyContext`: class."""

@@ -386,8 +386,9 @@ def start():
 
 def close():
     logger.warn("TERM|INT received, shutting down...")
-    global _server_event, _server_thread
+    global _server_event, _server_thread, manager
     _server_event.set()
+    manager.close()
     logger.warn("Wating threads shuts...")
     _server_thread.join(10.0)
 

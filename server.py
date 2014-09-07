@@ -64,9 +64,9 @@ client_html = u"""
 
 """
 
+manager = manager.IcyManager()
 
 class IcyRequestHandler(BaseHTTPRequestHandler):
-    manager = manager.IcyManager()
 
     def _get_login(self):
         try:
@@ -77,7 +77,8 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             return login.decode("base64").split(":", 1)
 
     def _serve_admin(self, url, query, user, password):
-        auth = self.manager.login(
+        global manager
+        auth = manager.login(
             user=user,
             password=password)
         # disabled = u'disabled' if not is_admin else None
@@ -85,13 +86,13 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         send_buf = []
         send_buf.append(server_header)
 
-        for mount in self.manager.context:
+        for mount in manager.context:
             # only include if there is a source on there
-            if self.manager.context[mount].sources:
+            if manager.context[mount].sources:
                 send_buf.append(mount_header.format(mount=mount))
                 for i, source in enumerate(
-                        self.manager.context[mount].sources):
-                    metadata = self.manager.context[
+                        manager.context[mount].sources):
+                    metadata = manager.context[
                         mount].saved_metadata.get(source, u'')
                     send_buf.append(client_html.format(
                         user=source.user,
@@ -119,7 +120,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             mount = parsed_query['mount'][0]
         except (KeyError, IndexError):
             mount = ''
-        for path in self.manager.lookup_destination(mount):
+        for path in manager.lookup_destination(mount):
             client = MetadataTuple(
                 user,
                 path.source,
@@ -135,14 +136,14 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             encoding = parsed_query.get('charset', ['latin1'])
             if not song is None:
                 metadata = fix_encoding(song[0], encoding[0])
-                self.manager.send_metadata(
+                manager.send_metadata(
                     metadata=metadata,
                     client=client)
             elif title and artist:
                 metadata = fix_encoding(
                     "%s - %s" % (artist[0], title[0]),
                     encoding[0])
-                self.manager.send_metadata(
+                manager.send_metadata(
                     metadata=metadata,
                     client=client)
 
@@ -199,6 +200,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(result)
 
     def do_SOURCE(self):
+        global manager
         logger.debug(self.headers)
         self.useragent = self.headers.get('User-Agent', None)
         self.mount = self.path  # oh so simple
@@ -230,7 +232,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
 
         icy_client = []
         logger.debug('lookup for source mountpoint %s' % self.mount)
-        for path in self.manager.lookup_destination(self.mount):
+        for path in manager.lookup_destination(self.mount):
             icy_client.append(
                 IcyClient(
                     path.host,
@@ -250,7 +252,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                 )
             )
             try:
-                self.manager.register_source(icy_client[-1])
+                manager.register_source(icy_client[-1])
             except Exception as err:
                 logger.error(err)
                 icy_client.pop()
@@ -282,9 +284,10 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             logger.info("source: User '%s' logged off.", user)
             while len(icy_client):
                 client = icy_client.pop()
-                self.manager.remove_source(client)
+                manager.remove_source(client)
 
     def do_GET(self):
+        global manager
         self.useragent = self.headers.get('User-Agent', None)
         parsed_url = urlparse.urlparse(self.path)
         parsed_query = urlparse.parse_qs(parsed_url.query)
@@ -314,7 +317,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             # return
 
     def login(self, user=None, password=None):
-        return self.manager.login(user, password)
+        return manager.login(user, password)
 
     def log_message(self, *args, **kwargs):
         """Disable logging, we don't need it"""

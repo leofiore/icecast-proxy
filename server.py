@@ -65,6 +65,7 @@ client_html = u"""
 """
 
 manager = manager.IcyManager()
+sockets = set()
 
 class IcyRequestHandler(BaseHTTPRequestHandler):
 
@@ -200,8 +201,8 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(result)
 
     def do_SOURCE(self):
-        global manager
-        logger.debug(self.headers)
+        global manager, sockets
+
         self.useragent = self.headers.get('User-Agent', None)
         self.mount = self.path  # oh so simple
         self.stream_name = self.headers.get('ice-name', '<Unknown>')
@@ -260,6 +261,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         logger.debug(
             'registered %d mountpoints destinations'
             % len(icy_client))
+        sockets.add(self.rfile)
         try:
             while True:
                 rlist, wlist, xlist = select([self.rfile], [], [], 0.5)
@@ -275,13 +277,14 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                         icy_client.remove(client)
                 if not len(icy_client):
                     logger.debug("Thread exiting since no more clients are active")
-                    self.rfile.close()
-                    return
+                    break
 
         except:
             logger.exception("Timeout occured (most likely)")
         finally:
             logger.info("source: User '%s' logged off.", user)
+            self.rfile.close()
+            sockets.remove(self.rfile)
             while len(icy_client):
                 client = icy_client.pop()
                 manager.remove_source(client)
@@ -386,9 +389,11 @@ def start():
 
 def close():
     logger.warn("TERM|INT received, shutting down...")
-    global _server_event, _server_thread, manager
+    global _server_event, _server_thread, manager, sockets
     _server_event.set()
     manager.close()
+    for s in sockets:
+        s.close()
     logger.warn("Wating threads shuts...")
     _server_thread.join(10.0)
 

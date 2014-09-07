@@ -1,6 +1,6 @@
 import threading
 import time
-import pylibshout
+import shout
 import logging
 
 
@@ -24,8 +24,8 @@ class Icecast(object):
         try:
             self._shout.open()
             logger.info("Connected to Icecast on " + self.config['mount'])
-        except (pylibshout.ShoutException) as err:
-            logger.exception("Failed to connect to Icecast server.")
+        except (shout.ShoutException) as err:
+            logger.exception("Failed to eonnect to Icecast server.")
             raise IcecastError("Failed to connect to icecast server.")
 
     def connected(self):
@@ -40,7 +40,7 @@ class Icecast(object):
         raise NotImplementedError("Icecast does not support reading.")
 
     def nonblocking(self, state):
-        pass
+        self._shout.nonblocking = state
 
     def close(self):
         """Closes the libshout object and tries to join the thread if we are
@@ -49,12 +49,12 @@ class Icecast(object):
         try:
             self._shout.close()
             logger.info("Disconnected from Icecast on " + self.config['mount'])
-        except (pylibshout.ShoutException) as err:
-            if err[0] == pylibshout.SHOUTERR_UNCONNECTED:
+        except (shout.ShoutException) as err:
+            if err[0] == shout.SHOUTERR_UNCONNECTED:
                 pass
             else:
-                logger.exception("Exception in pylibshout close call.")
-                raise IcecastError("Exception in pylibshout close.")
+                logger.exception("Exception in shout close call.")
+                raise IcecastError("Exception in shout close.")
         try:
             self._thread.join(5.0)
         except (RuntimeError) as err:
@@ -81,7 +81,7 @@ class Icecast(object):
                     try:
                         self._shout.send(buff)
                         #self._shout.sync()
-                    except (pylibshout.ShoutException) as err:
+                    except (shout.ShoutException) as err:
                         logger.exception("Failed sending stream data.")
                         self.reboot_libshout()
 
@@ -113,14 +113,14 @@ class Icecast(object):
     def set_metadata(self, metadata):
         try:
             self._shout.metadata = {'song': metadata}  # Stupid library
-        except (pylibshout.ShoutException) as err:
+        except (shout.ShoutException) as err:
             logger.exception("Failed sending metadata. No action taken.")
             self._saved_meta = metadata
 
     def set_audio_info(self, audio_info):
         try:
             self._shout.audio_info = audio_info
-        except (pylibshout.ShoutException) as err:
+        except (shout.ShoutException) as err:
             logger.exception("Failed sending audio_info. No action taken.")
             self._saved_audio_info = audio_info
 
@@ -129,10 +129,10 @@ class Icecast(object):
 
         Creates a libshout object and puts the configuration to use.
         """
-        shout = pylibshout.Shout(tag_fix=False)
-        self.config.setup(shout)
-        shout.audio_info = self._saved_audio_info
-        return shout
+        _shout = shout.Shout()
+        self.config.setup(_shout)
+        _shout.audio_info = self._saved_audio_info
+        return _shout
 
     def reboot_libshout(self):
         """Internal method
@@ -140,11 +140,17 @@ class Icecast(object):
         Tries to recreate the libshout object.
         """
         try:
+            self._shout.close()
+            del self._shout
+        except:
+            logger.exception("Closing failed")
+        try:
             self._shout = self.setup_libshout()
         except (IcecastError) as err:
             logger.exception("Configuration failed.")
             self.close()
         try:
+            logger.exception("Reopening...")
             self.connect()
         except (IcecastError) as err:
             logger.exception("Connection failure.")
@@ -157,17 +163,25 @@ class IcecastConfig(dict):
     def __init__(self, attributes=None):
         super(IcecastConfig, self).__init__(attributes or {})
 
-    def setup(self, shout):
+    def setup(self, _shout):
         """Setup 'shout' configuration by setting attributes on the object.
 
-        'shout' is a pylibshout.Shout object.
+        'shout' is a shout.Shout object.
         """
         for key, value in self.iteritems():
             try:
-                setattr(shout, key, value)
-            except pylibshout.ShoutException as err:
+                if isinstance(value, unicode):
+                    value = str(value)
+                setattr(_shout, key, value)
+            except shout.ShoutException as err:
                 raise IcecastError(("Incorrect configuration option '{:s}' or "
                                    " value '{:s}' used.").format(key, value))
+            except Exception as e:
+                print "--------------"
+                print e
+                print key, value
+                print "--------------"
+
 
 
 class IcecastError(Exception):

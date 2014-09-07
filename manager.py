@@ -25,10 +25,10 @@ def generate_info(client):
          'genre': client.genre,
          'mount': client.mount},
 
-        {'bitrate': client.bitrate,
-         'samplerate': client.samplerate,
-         'channels': client.channels,
-         'quality': client.quality})
+        {'bitrate': str(client.bitrate),
+         'samplerate': str(client.samplerate),
+         'channels': str(client.channels),
+         'quality': str(client.quality)})
 
 
 class IcyManager(object):
@@ -353,7 +353,7 @@ class IcyClient(dict):
             'port': port,
             'password': password,
             'format': outformat,
-            'protocol': protocol,
+            'protocol': ['http', 'xaudiocast', 'icy'][int(protocol)],
             'name': name,
             'url': url,
             'genre': genre,
@@ -410,7 +410,13 @@ class IcyClient(dict):
 
     @property
     def format(self):
-        return ['ogg', 'mpeg', 'aac', 'flac'].index(self.attributes["format"])
+        #return ['ogg', 'mpeg', 'aac', 'flac'].index(self.attributes["format"])
+        return {
+            'ogg': 'ogg',
+            'mpeg': 'mp3',
+            'aac': 'aac',
+            'flac': 'flac'
+        }[self.attributes["format"]]
 
     @property
     def protocol(self):

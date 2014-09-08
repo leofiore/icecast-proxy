@@ -8,6 +8,7 @@ from database import SQLManager, User, Mount
 from memory import cStringTranscoder
 from datetime import datetime
 from calendar import timegm
+import shout
 
 
 logger = logging.getLogger('server.manager')
@@ -25,10 +26,10 @@ def generate_info(client):
          'genre': client.genre,
          'mount': client.mount},
 
-        {'bitrate': str(client.bitrate),
-         'samplerate': str(client.samplerate),
-         'channels': str(client.channels),
-         'quality': str(client.quality)})
+        {shout.SHOUT_AI_BITRATE: str(client.bitrate),
+         shout.SHOUT_AI_SAMPLERATE: str(client.samplerate),
+         shout.SHOUT_AI_CHANNELS: str(client.channels),
+         shout.SHOUT_AI_QUALITY: str(client.quality)})
 
 
 class IcyManager(object):
@@ -412,7 +413,7 @@ class IcyClient(dict):
     def format(self):
         #return ['ogg', 'mpeg', 'aac', 'flac'].index(self.attributes["format"])
         return {
-            'ogg': 'ogg',
+            'ogg': 'vorbis',
             'mpeg': 'mp3',
             'aac': 'aac',
             'flac': 'flac'

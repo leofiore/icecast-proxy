@@ -112,7 +112,7 @@ class Icecast(object):
 
     def set_metadata(self, metadata):
         try:
-            self._shout.metadata = {'song': metadata}  # Stupid library
+            self._shout.set_metadata({'song': metadata})  # Stupid library
         except (shout.ShoutException) as err:
             logger.exception("Failed sending metadata. No action taken.")
             self._saved_meta = metadata

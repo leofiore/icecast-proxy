@@ -9,9 +9,7 @@ setup(
     url='https://github.com/radiocicletta/icecast-proxy',
     install_requires=[
         'sqlalchemy',
-        'bcrypt'
-    ],
-    dependency_links=[
-        "http://github.com/Wessie/pylibshout/tarball/master#egg=pylibshout"
+        'bcrypt',
+        'python-shout',
     ]
 )

@@ -32,7 +32,7 @@ class Icecast(object):
         """Returns True if the libshout object is currently connected to
         an icecast server."""
         try:
-            return True if self._shout.connected() == -7 else False
+            return (self._shout.get_connected() == shout.SHOUTERR_CONNECTED)
         except AttributeError:
             return False
 
@@ -63,7 +63,7 @@ class Icecast(object):
     def run(self):
         while not self._should_run.is_set():
             while self.connected():
-                if hasattr(self, '_saved_meta'):
+                if hasattr(sef, '_saved_meta'):
                     self.set_metadata(self._saved_meta)
                     del self._saved_meta
 
@@ -112,7 +112,7 @@ class Icecast(object):
 
     def set_metadata(self, metadata):
         try:
-            self._shout.set_metadata({'song': metadata})  # Stupid library
+            self._shout.set_metadata(metadata)  # Stupid library
         except (shout.ShoutException) as err:
             logger.exception("Failed sending metadata. No action taken.")
             self._saved_meta = metadata

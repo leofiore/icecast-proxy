@@ -63,7 +63,7 @@ class Icecast(object):
     def run(self):
         while not self._should_run.is_set():
             while self.connected():
-                if hasattr(sef, '_saved_meta'):
+                if hasattr(self, '_saved_meta'):
                     self.set_metadata(self._saved_meta)
                     del self._saved_meta
 

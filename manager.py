@@ -242,9 +242,9 @@ class IcyContext(object):
                 if source in self.saved_metadata:
                     metadata = self.saved_metadata[source]
                     self.icecast.set_metadata(metadata)
-                else:
-                    # No saved metadata, send an empty one
-                    self.icecast.set_metadata(u'')
+                #else:
+                #    # No saved metadata, send an empty one
+                #    self.icecast.set_metadata(u'')
                 if source in self.saved_audio_info:
                     audio_info = self.saved_audio_info[source]
                     self.icecast.set_audio_info(audio_info)

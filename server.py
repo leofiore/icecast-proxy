@@ -136,14 +136,14 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             if not song is None:
                 metadata = fix_encoding(song[0], encoding[0])
                 self.manager.send_metadata(
-                    metadata={'song': metadata},
+                    metadata={'song': metadata.encode('latin-1')},
                     client=client)
             elif title and artist:
                 metadata = fix_encoding(
                     "%s - %s" % (artist[0], title[0]),
                     encoding[0])
                 self.manager.send_metadata(
-                    metadata={'song': metadata},
+                    metadata={'song': metadata.encode('latin-1')},
                     client=client)
 
         # Send a response... although most clients just ignore this.

@@ -63,19 +63,11 @@ class Icecast(object):
     def run(self):
         while not self._should_run.is_set():
             while self.connected():
-                if hasattr(self, '_saved_meta'):
-                    self.set_metadata(self._saved_meta)
-                    del self._saved_meta
-
-                if hasattr(self, '_saved_audio_info'):
-                    self.set_audio_info(self._saved_audio_info)
-                    del self._saved_audio_info
-
                 buff = self.source.read(8192)
                 if buff == b'':
                     # EOF received
-                    self.close()
                     logger.error("Source EOF, closing ourself.")
+                    self.close()
                     break
                 else:
                     try:
@@ -87,7 +79,7 @@ class Icecast(object):
                         self.reboot_libshout()
 
             if not self._should_run.is_set():
-                logger.exception("Streaming not runninStreaming not runningg")
+                logger.exception("Streaming not running")
                 time.sleep(self.connecting_timeout)
                 self.reboot_libshout()
 

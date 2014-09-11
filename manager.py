@@ -123,6 +123,9 @@ class IcyManager(object):
         except KeyError:
             logger.info("Received metadata for non-existant mountpoint %s",
                         client.mount)
+        except:
+            logger.info("Error in metadata for mountpoint %s",
+                        client.mount)
 
 
 class IcyContext(object):
@@ -323,7 +326,8 @@ class IcyContext(object):
             # Current source send metadata to us! yay
             logger.info("%s:metadata.update: %s", self.mount, metadata)
             self.saved_metadata[source] = metadata
-            self.icecast.set_metadata(metadata)  # Lol consistent naming (not)
+            if source.format == 'mpeg':
+                self.icecast.set_metadata(metadata)  # Lol consistent naming (not)
         else:
             for source in self.sources:
                 if (source.user == client.user):

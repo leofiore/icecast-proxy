@@ -252,7 +252,7 @@ class IcyContext(object):
                     audio_info = self.saved_audio_info[source]
                     self.icecast.set_audio_info(audio_info)
             self.current_source = source
-            return source.buffer
+            return source
 
     def read(self, size=4096, timeout=None):
         """Reads at most :obj:`size`: of bytes from the first source in the
@@ -459,6 +459,11 @@ class IcyClient(dict):
     def write(self, data):
         if self.is_active:
             self.attributes['audio_buffer'].write(data)
+
+    def read(self, size):
+        if self.is_active:
+            return self.attributes['audio_buffer'].read(size)
+        return None
 
     def get(self, k, d=None):
         try:

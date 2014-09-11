@@ -56,9 +56,9 @@ class cStringTranscoder:
         with self.not_full:
             retries = 0
             while self.writepos - self.readpos == self.size:
-                self.not_full.wait(0.5)
+                self.not_full.wait(0.1)
                 retries = retries + 1
-                if retries > 10:
+                if retries > 100:
                     raise Exception()
             if self.decproc and self.encproc:
                 data_sent = False
@@ -102,9 +102,9 @@ class cStringTranscoder:
             return
         with self.not_empty:
             while self.writepos - self.readpos == 0:
-                self.not_empty.wait(0.5)
+                self.not_empty.wait(0.1)
             while self.writepos < (self.readpos + size) % self.size:
-                self.not_empty.wait(0.5)
+                self.not_empty.wait(0.1)
             self.buffer.seek(self.readpos)
             data = self.buffer.read(min(size, self.size - self.readpos))
             oldpos = self.readpos

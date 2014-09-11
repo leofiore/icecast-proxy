@@ -199,6 +199,7 @@ class IcyContext(object):
         self.sources.append(source)
 
         self.sources.extend(latest)
+        self.purge()
 
         logger.debug("Current sources are '{sources:s}'.".format(
             sources=[repr(s) for s in self.sources])
@@ -477,8 +478,8 @@ class IcyClient(dict):
 
     def write(self, data):
         if self.is_active:
-            self.last_activity = timegm(datetime.utcnow().timetuple())
             self.attributes['audio_buffer'].write(data)
+            self.last_activity = timegm(datetime.utcnow().timetuple())
 
     def read(self, size):
         if self.is_active:

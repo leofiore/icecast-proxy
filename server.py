@@ -263,12 +263,15 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
             % len(icy_client))
         sockets.add(self.rfile)
         try:
-            while True:
+            retries = 0
+            while self.rfile and retries < 10:
                 rlist, wlist, xlist = select([self.rfile], [], [], 0.5)
                 if not len(rlist):
+                    retries = retries + 1
                     continue
+                retries = 0
                 data = self.rfile.read(4096)
-                if data == '':
+                if data == b'':
                     break
                 for client in icy_client:
                     if client.is_active:
@@ -281,13 +284,13 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
 
         except:
             logger.exception("Timeout occured (most likely)")
-        finally:
-            logger.info("source: User '%s' logged off.", user)
+        logger.info("source: User '%s' logged off.", user)
+        if self.rfile:
             self.rfile.close()
-            sockets.remove(self.rfile)
-            while len(icy_client):
-                client = icy_client.pop()
-                manager.remove_source(client)
+        sockets.remove(self.rfile)
+        while len(icy_client):
+            client = icy_client.pop()
+            manager.remove_source(client)
 
     def do_GET(self):
         global manager

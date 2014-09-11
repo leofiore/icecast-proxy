@@ -54,8 +54,12 @@ class cStringTranscoder:
         if self.end:
             return
         with self.not_full:
+            retries = 0
             while self.writepos - self.readpos == self.size:
-                self.not_full.wait()
+                self.not_full.wait(0.5)
+                retries = retries + 1
+                if retries > 10:
+                    raise Exception()
             if self.decproc and self.encproc:
                 data_sent = False
                 data = None
@@ -98,9 +102,9 @@ class cStringTranscoder:
             return
         with self.not_empty:
             while self.writepos - self.readpos == 0:
-                self.not_empty.wait()
+                self.not_empty.wait(0.5)
             while self.writepos < (self.readpos + size) % self.size:
-                self.not_empty.wait()
+                self.not_empty.wait(0.5)
             self.buffer.seek(self.readpos)
             data = self.buffer.read(min(size, self.size - self.readpos))
             oldpos = self.readpos
@@ -115,11 +119,6 @@ class cStringTranscoder:
     def close(self):
         self.end = True
         try:
-            self.buffer.close()
-            del self.buffer
-        except Exception as e:
-            logger.error(e)
-        try:
             if self.encproc:
                 self.encproc.stdout.close()
                 self.encproc.kill()
@@ -127,6 +126,11 @@ class cStringTranscoder:
                 self.decproc.stdin.close()
                 self.decproc.stdout.close()
                 self.decproc.kill()
+        except Exception as e:
+            logger.error(e)
+        try:
+            self.buffer.close()
+            del self.buffer
         except Exception as e:
             logger.error(e)
         logger.debug("client closed")

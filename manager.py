@@ -176,8 +176,8 @@ class IcyContext(object):
         now = timegm(datetime.utcnow().timetuple())
         while len(self.sources):
             src = self.sources.pop()
-            if src.user == source.user and source.start - src.start > 10000 \
-                    or now - src.last_activity > 10000:
+            if (src.user == source.user and source.start - src.start > 10000) \
+                    or now - src.last_activity > 10000 or not src.is_active:
                 src.terminate()
                 latest.appendleft(src)
                 logger.debug(
@@ -483,7 +483,6 @@ class IcyClient(dict):
 
     def read(self, size):
         if self.is_active:
-            self.last_activity = timegm(datetime.utcnow().timetuple())
             return self.attributes['audio_buffer'].read(size)
         return None
 

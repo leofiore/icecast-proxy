@@ -3,6 +3,8 @@ from cStringIO import StringIO
 from subprocess import Popen, PIPE
 from select import select
 import logging
+import fcntl
+import os
 
 
 logger = logging.getLogger('server.memory')
@@ -44,6 +46,9 @@ class cStringTranscoder:
                 enc.split(),
                 stdin=self.decproc.stdout, stdout=PIPE
             )
+            fd = self.encproc.stdout.fileno()
+            fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+            fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
 
     def write(self, data_in):
         if self.end:

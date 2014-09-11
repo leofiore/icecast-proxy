@@ -13,10 +13,10 @@ class cStringTranscoder:
         '--sign=signed --endian=little -o - -'
 
     decode_mpeg = 'madplay -q -b 16 -R 44100 -S -o raw:- -'
-    encode_mpeg = 'lame --quiet --preset cbr 128 -r -s 44.1 --bitwidth 16 - -'
+    encode_mpeg = 'lame --quiet --preset cbr {bitrate} -r -s 44.1 --bitwidth 16 - -'
 
     decode_ogg = 'oggdec -Q -R -b 16 -e 0 -s 1 -o - -'
-    encode_ogg = 'oggenc -Q -r -B 16 -C 2 -R 44100 --raw-endianness 0 -q 1.5 -'
+    encode_ogg = 'oggenc -Q --ignorelength -r -b {bitrate} -B 16 -C 2 -R 44100 --raw-endianness 0 -q 1.5 -'
 
     def __init__(self, infmt, outfmt):
         self.buffer = StringIO()
@@ -35,7 +35,7 @@ class cStringTranscoder:
         else:
             logger.info("Buffer will activate transcoding")
             dec = getattr(self, 'decode_' + infmt[0])
-            enc = getattr(self, 'encode_' + outfmt[0])
+            enc = getattr(self, 'encode_' + outfmt[0]).format(bitrate=outfmt[1])
             self.decproc = Popen(
                 dec.split(),
                 stdin=PIPE, stdout=PIPE
@@ -56,7 +56,7 @@ class cStringTranscoder:
                 data = None
                 try:
                     while not self.end and not data_sent and not data:
-                        logger.debug("Processing encode/decode")
+                        #logger.debug("Processing encode/decode")
                         rlist, wlist, xlist = select(
                             [self.encproc.stdout, self.decproc.stdout],
                             [self.decproc.stdin],
@@ -66,12 +66,12 @@ class cStringTranscoder:
                         if len(wlist) and not data_sent:
                             self.decproc.stdin.write(data_in)
                             data_sent = True
-                            logger.debug("wrote to decoder")
+                            #logger.debug("wrote to decoder")
                         if len(rlist) == 2:
                             data = self.encproc.stdout.read(8192)
                             if not len(data):
                                 return
-                            logger.debug("read from encoder %s", len(data))
+                            #logger.debug("read from encoder %s", len(data))
                         elif not len(rlist) and data_sent:
                             return
                 except IOError as err:

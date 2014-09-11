@@ -170,9 +170,11 @@ class IcyContext(object):
         # sort sources by privileges (0 <- most to last -> N)
         # and by timestamp (from newer to oldest)
         latest = collections.deque()
+        now = timegm(datetime.utcnow().timetuple())
         while len(self.sources):
             src = self.sources.pop()
-            if src.user == source.user and  source.start - src.start > 10000:
+            if src.user == source.user and source.start - src.start > 10000 \
+                    or now - src.last_activity > 10000:
                 src.terminate()
                 latest.appendleft(src)
                 logger.debug(
@@ -222,12 +224,24 @@ class IcyContext(object):
         # Close our buffer to make sure we EOF
         #source_tuple.buffer.close()
 
+    def purge(self):
+        """
+        Purges the sources queue
+        """
+        while len(self.sources):
+            s = self.sources[-1]
+            if not s.is_active:
+                self.sources.pop()
+            else:
+                return
+
     @property
     def source(self):
         """Returns the first source in the :attr:`sources` deque.
 
         If :attr:`sources` is empty it returns :const:`None` instead
         """
+        self.purge()
         try:
             source = self.sources[0]
         except IndexError:
@@ -368,6 +382,7 @@ class IcyClient(dict):
             'timestamp': timegm(datetime.utcnow().timetuple())
         }
         self.is_active = True
+        self.last_activity = timegm(datetime.utcnow().timetuple())
 
     def __hash__(self):
         return hash(':'.join(
@@ -458,10 +473,12 @@ class IcyClient(dict):
 
     def write(self, data):
         if self.is_active:
+            self.last_activity = timegm(datetime.utcnow().timetuple())
             self.attributes['audio_buffer'].write(data)
 
     def read(self, size):
         if self.is_active:
+            self.last_activity = timegm(datetime.utcnow().timetuple())
             return self.attributes['audio_buffer'].read(size)
         return None
 

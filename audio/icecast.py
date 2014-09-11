@@ -83,9 +83,11 @@ class Icecast(object):
                         #self._shout.sync()
                     except (pylibshout.ShoutException) as err:
                         logger.exception("Failed sending stream data.")
+                        time.sleep(self.connecting_timeout)
                         self.reboot_libshout()
 
             if not self._should_run.is_set():
+                logger.exception("Streaming not runninStreaming not runningg")
                 time.sleep(self.connecting_timeout)
                 self.reboot_libshout()
 

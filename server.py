@@ -265,7 +265,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         try:
             retries = 0
             while self.rfile and retries < 10:
-                rlist, wlist, xlist = select([self.rfile], [], [], 0.5)
+                rlist, wlist, xlist = select([self.rfile], [], [], 1)
                 if not len(rlist):
                     retries = retries + 1
                     continue

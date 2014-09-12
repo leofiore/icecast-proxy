@@ -25,10 +25,10 @@ class cStringTranscoder:
         self.not_full = threading.Condition(self.mutex)
         self.end = False
         if infmt == outfmt:
+            self.transcoder = None
+        else:
             self.transcoder = TranscoderThread(infmt, outfmt)
             self.transcoder.start()
-        else:
-            self.transcoder = None
 
     def write(self, data_in):
         if self.end:

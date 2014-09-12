@@ -63,7 +63,10 @@ class Icecast(object):
     def run(self):
         while not self._should_run.is_set():
             while self.connected():
-                buff = self.source.read(8192)
+                try:
+                    buff = self.source.read(8192)
+                except:
+                    pass
                 if buff == b'':
                     # EOF received
                     logger.error("Source EOF, closing ourself.")

@@ -270,7 +270,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                     retries = retries + 1
                     continue
                 retries = 0
-                data = self.rfile.read(4096)
+                data = self.rfile.read(8192)
                 if data == b'':
                     break
                 for client in icy_client:

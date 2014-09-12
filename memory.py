@@ -70,7 +70,7 @@ class cStringTranscoder:
                             [self.encproc.stdout, self.decproc.stdout],
                             [self.decproc.stdin],
                             [],
-                            2
+                            5
                         )
                         if len(wlist) and not data_sent:
                             self.decproc.stdin.write(data_in)

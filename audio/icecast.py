@@ -143,8 +143,10 @@ class Icecast(object):
             self.close()
         try:
             self.connect()
+            self.connecting_timeout = 5.0
         except (IcecastError) as err:
             logger.exception("Connection failure.")
+            self.conncting_timeout = self.connecting_timeout * 2
 
 
 class IcecastConfig(dict):

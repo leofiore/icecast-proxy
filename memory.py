@@ -26,6 +26,7 @@ class cStringTranscoder:
         self.end = False
         if infmt == outfmt:
             self.transcoder = TranscoderThread(infmt, outfmt)
+            self.transcoder.start()
         else:
             self.transcoder = None
 
@@ -126,8 +127,8 @@ class TranscoderThread(threading.Thread):
             fd = self.encproc.stdout.fileno()
             fl = fcntl.fcntl(fd, fcntl.F_GETFL)
             fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
-            self.readqueue = Queue()
-            self.writequeue = Queue()
+        self.readqueue = Queue()
+        self.writequeue = Queue()
 
     def run(self):
         while not self.end:

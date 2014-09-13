@@ -61,6 +61,7 @@ class Icecast(object):
             pass
 
     def run(self):
+        errors = 0
         while not self._should_run.is_set():
             while self.connected():
                 try:
@@ -75,15 +76,19 @@ class Icecast(object):
                 else:
                     try:
                         self._shout.send(buff)
+                        errors = 0
                         #self._shout.sync()
                     except (pylibshout.ShoutException) as err:
                         logger.exception("Failed sending stream data.")
+                        errors = errors + 1
+                        if errors == 2:
+                            self.close()
+                            return
                         time.sleep(self.connecting_timeout)
                         self.reboot_libshout()
 
             if not self._should_run.is_set():
                 logger.exception("Streaming not running")
-                time.sleep(self.connecting_timeout)
                 self.reboot_libshout()
 
     def start(self):

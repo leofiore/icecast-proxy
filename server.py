@@ -15,6 +15,8 @@ from SocketServer import ThreadingMixIn, BaseServer
 from manager import IcyClient
 from select import select
 from collections import namedtuple
+from Queue import Queue, Full, Empty
+from time import sleep
 
 
 socket.setdefaulttimeout(5.0)
@@ -65,7 +67,6 @@ client_html = u"""
 """
 
 manager = manager.IcyManager()
-sockets = set()
 
 class IcyRequestHandler(BaseHTTPRequestHandler):
 
@@ -201,7 +202,7 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(result)
 
     def do_SOURCE(self):
-        global manager, sockets
+        global manager, dispatcher
 
         self.useragent = self.headers.get('User-Agent', None)
         self.mount = self.path  # oh so simple
@@ -252,45 +253,11 @@ class IcyRequestHandler(BaseHTTPRequestHandler):
                     outbitrate=path.bitrate or self.source_bitrate
                 )
             )
-            try:
-                manager.register_source(icy_client[-1])
-            except Exception as err:
-                logger.error(err)
-                icy_client.pop()
-                continue
         logger.debug(
-            'registered %d mountpoints destinations'
+            'registering %d mountpoints destinations'
             % len(icy_client))
-        sockets.add(self.rfile)
-        try:
-            retries = 0
-            while self.rfile and retries < 10:
-                rlist, wlist, xlist = select([self.rfile], [], [], 1)
-                if not len(rlist):
-                    retries = retries + 1
-                    continue
-                retries = 0
-                data = self.rfile.read(8192)
-                if data == b'':
-                    break
-                for client in icy_client:
-                    if client.is_active:
-                        client.write(data)
-                    else:
-                        icy_client.remove(client)
-                if not len(icy_client):
-                    logger.debug("Thread exiting since no more clients are active")
-                    break
-
-        except:
-            logger.exception("Timeout occured (most likely)")
-        logger.info("source: User '%s' logged off.", user)
-        if self.rfile:
-            self.rfile.close()
-        sockets.remove(self.rfile)
-        while len(icy_client):
-            client = icy_client.pop()
-            manager.remove_source(client)
+        while not dispatcher.add(self.rfile, icy_client):
+            sleep(1)
 
     def do_GET(self):
         global manager
@@ -357,6 +324,96 @@ def fix_encoding(metadata, encoding):
             return fix_encoding(metadata, 'latin1')
 
 
+class Dispatcher(threading.Thread):
+
+    daemon = True
+
+    def __init__(self):
+
+        super(Dispatcher, self).__init__()
+
+        self.source_socks = {}
+        self.socks = []
+
+        self.new = Queue()
+        self.bye = Queue()
+
+    def run(self):
+        global _server_event, manager
+
+        while not _server_event.is_set():
+            try:
+                newsock, newclients = self.new.get_nowait()
+                self.socks.append(newsock)
+                self.source_socks[newsock.fileno()] = newclients
+                for c in newclients:
+                    manager.register_source(c)
+            except Empty:
+                pass
+
+            rlist, wlist, xlist = select(self.socks, [], [], 5)
+            #logger.info("%s/%s sockets ready", len(rlist), len(self.socks))
+            for sock in rlist:
+                idx = sock.fileno()
+                try:
+                    data = sock.recv(4096, socket.MSG_WAITALL)
+                    #logger.info("read %s", len(data))
+                except:
+                    #logger.exception("Failed reading")
+                    self.socks.remove(sock)
+                    for client in self.source_socks[idx]:
+                        manager.remove_source(client)
+                    del self.source_socks[idx]
+
+                if data == b'':
+                    continue
+                if idx in self.source_socks:
+                    for client in self.source_socks[idx]:
+                        try:
+                            if client.is_active:
+                                client.write(data)
+                            else:
+                                manager.remove_source(client)
+                                self.source_socks[idx].remove(client)
+                        except:
+                            logger.exception("Failed writing")
+                            manager.remove_source(client)
+                            self.source_socks[idx].remove(client)
+
+                    if not len(self.source_socks[idx]):
+                        self.socks.remove(sock)
+                        del self.source_socks[idx]
+                        sock.close()
+
+
+    def add(self, sock, clients):
+        try:
+            self.new.put_nowait((
+                socket.fromfd(
+                    os.dup(sock.fileno()),
+                    socket.AF_INET,
+                    socket.SOCK_STREAM),
+                clients))
+            return True
+        except Full:
+            return False
+
+    def close(self):
+        for source in self.source_socks.values():
+            for client in source:
+                try:
+                    manager.remove_source(client)
+                except:
+                    pass
+        for sock in self.socks:
+            try:
+                sock.close()
+            except:
+                pass
+
+dispatcher = Dispatcher()
+
+
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     timeout = 0.5
 
@@ -382,21 +439,21 @@ def run(server=ThreadedHTTPServer,
 
 
 def start():
-    global _server_event, _server_thread
+    global _server_event, _server_thread, dispatcher
     _server_event = threading.Event()
     _server_thread = threading.Thread(target=run, kwargs={'continue_running':
                                                           _server_event})
+    dispatcher.start()
     _server_thread.daemon = True
     _server_thread.start()
 
 
 def close():
     logger.warn("TERM|INT received, shutting down...")
-    global _server_event, _server_thread, manager, sockets
+    global _server_event, _server_thread, manager, dispatcher
     _server_event.set()
     manager.close()
-    for s in sockets:
-        s.close()
+    dispatcher.close()
     logger.warn("Wating threads shuts...")
     _server_thread.join(10.0)
 
